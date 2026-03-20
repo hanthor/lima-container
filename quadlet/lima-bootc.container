@@ -39,6 +39,10 @@ Environment=LIMA_TEMPLATE=default
 Environment=LIMA_ACCEL_MODE=auto
 Environment=AUTO_START_LIMA=N
 Environment=LIMA_BOOTC_ENABLED=true
+# Optional: enable TLS (mount your certs and uncomment)
+# Environment=TLS_CERT=/certs/cert.pem
+# Environment=TLS_KEY=/certs/key.pem
+# Volume=/path/to/certs:/certs:ro,z
 
 [Service]
 Restart=on-failure

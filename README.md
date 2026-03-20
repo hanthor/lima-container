@@ -71,6 +71,37 @@ services:
 | Full REST API reference | [docs/api.md](docs/api.md) |
 | Internal architecture | [docs/architecture.md](docs/architecture.md) |
 
+## TLS / HTTPS
+
+By default nginx serves plain HTTP. To enable HTTPS (required for noVNC "secure context" on non-localhost), set `TLS_CERT` and `TLS_KEY` to PEM file paths inside the container:
+
+```bash
+docker run -d \
+  --name lima-web \
+  --device /dev/kvm \
+  --device /dev/net/tun \
+  --cap-add NET_ADMIN \
+  -p 8006:8006 \
+  -v ./certs:/certs:ro \
+  -e TLS_CERT=/certs/cert.pem \
+  -e TLS_KEY=/certs/key.pem \
+  ghcr.io/<your-org>/lima-web:latest
+```
+
+**Self-signed certificate** (for testing):
+
+```bash
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+  -days 365 -nodes -subj "/CN=lima" \
+  -keyout certs/key.pem -out certs/cert.pem
+```
+
+**Let's Encrypt / reverse proxy**: If you already have a TLS-terminating reverse proxy (Caddy, Traefik, nginx), leave `TLS_CERT`/`TLS_KEY` unset and let the proxy handle HTTPS.
+
+**Tailscale** (zero-config alternative): Run the container on a Tailscale node and access it via [Tailscale HTTPS](https://tailscale.com/kb/1153/enabling-https) or MagicDNS — no certificate management needed.
+
+When TLS is enabled, WebSocket connections (noVNC, xterm.js, RDP) automatically upgrade to `wss://`.
+
 ## Caveats
 
 - Designed for development/experimentation, not production virtualization.

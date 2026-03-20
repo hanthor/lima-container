@@ -6,6 +6,22 @@ set -Eeuo pipefail
 : "${LIMA_TEMPLATE:=default}"
 : "${AUTO_START_LIMA:=N}"
 : "${LIMA_HOME:=/var/lib/lima}"
+: "${TLS_CERT:=}"
+: "${TLS_KEY:=}"
+
+# Build nginx listen directive and optional SSL directives
+if [ -n "${TLS_CERT}" ] && [ -n "${TLS_KEY}" ]; then
+  LISTEN_DIRECTIVE="listen ${WEB_PORT} ssl default_server"
+  SSL_DIRECTIVES="
+  ssl_certificate ${TLS_CERT};
+  ssl_certificate_key ${TLS_KEY};
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_ciphers HIGH:!aNULL:!MD5;
+  ssl_prefer_server_ciphers on;"
+else
+  LISTEN_DIRECTIVE="listen ${WEB_PORT} default_server"
+  SSL_DIRECTIVES=""
+fi
 
 mkdir -p /etc/nginx/conf.d /var/log/nginx "${LIMA_HOME}"
 # Ensure the lima user (uid 1000) owns its home directory (important when the
@@ -21,7 +37,8 @@ map \$http_upgrade \$connection_upgrade {
 }
 
 server {
-  listen ${WEB_PORT} default_server;
+  ${LISTEN_DIRECTIVE};
+  ${SSL_DIRECTIVES}
   server_name _;
   absolute_redirect off;
 

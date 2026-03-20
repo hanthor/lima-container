@@ -12,7 +12,9 @@ info:
 
 servers:
   - url: http://localhost:8006
-    description: Local container
+    description: Local container (plain HTTP)
+  - url: https://localhost:8006
+    description: Local container (HTTPS, when TLS_CERT/TLS_KEY are set)
 
 tags:
   - name: instances
