@@ -21,6 +21,8 @@ tags:
     description: VNC console access
   - name: shell
     description: Browser-based SSH terminal
+  - name: rdp
+    description: RDP remote desktop access
   - name: templates
     description: VM templates
   - name: system
@@ -212,6 +214,62 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           description: Instance is not running
+
+  /api/instances/{name}/rdp:
+    get:
+      operationId: getRDPStatus
+      summary: Get RDP status for a VM instance
+      description: Check if RDP (GNOME Remote Desktop or xrdp) is available and enabled.
+      tags: [rdp]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: RDP status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RDPStatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/instances/{name}/rdp/enable:
+    post:
+      operationId: enableRDP
+      summary: Enable RDP in a VM instance
+      description: |
+        Enables RDP via GNOME Remote Desktop (grdctl) or xrdp, depending on
+        what is installed in the VM. For GNOME Remote Desktop, credentials are
+        configured via grdctl and the systemd user service is started.
+      tags: [rdp]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnableRDPRequest"
+            example:
+              username: lima
+              password: changeme
+      responses:
+        "200":
+          description: RDP enabled successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnableRDPResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: No RDP server available in the VM
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/templates:
     get:
@@ -617,6 +675,60 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BootcBuild"
+
+    RDPStatus:
+      type: object
+      required: [available, type, port, enabled]
+      properties:
+        available:
+          type: boolean
+          description: Whether an RDP server is installed in the VM
+        type:
+          type: string
+          enum: [grd, xrdp, none]
+          description: Type of RDP server detected
+        port:
+          type: integer
+          description: RDP port (typically 3389)
+          example: 3389
+        enabled:
+          type: boolean
+          description: Whether port 3389 is currently listening
+
+    RDPStatusResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/RDPStatus"
+
+    EnableRDPRequest:
+      type: object
+      required: [password]
+      properties:
+        username:
+          type: string
+          default: lima
+          description: RDP username (defaults to "lima")
+        password:
+          type: string
+          description: RDP password
+
+    EnableRDPResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [enabled, type, message]
+          properties:
+            enabled:
+              type: boolean
+            type:
+              type: string
+              enum: [grd, xrdp]
+            message:
+              type: string
 
     CreateBootcBuildRequest:
       type: object

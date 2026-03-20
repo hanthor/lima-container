@@ -23,6 +23,7 @@ func main() {
 
 	lima := NewLimaCtl(limaHome)
 	vnc := NewVNCManager(limaHome)
+	grdMgr := NewGRDManager(limaHome)
 
 	enabled := os.Getenv("LIMA_BOOTC_ENABLED") == "true"
 	var bootcMgr *BootcManager
@@ -53,7 +54,10 @@ func main() {
 	mux.HandleFunc("POST /api/instances/{name}/restart", h.RestartInstance)
 	mux.HandleFunc("DELETE /api/instances/{name}", h.DeleteInstance)
 	mux.HandleFunc("GET /api/instances/{name}/vnc", h.GetVNC)
+	mux.HandleFunc("GET /api/instances/{name}/rdp", grdMgr.HandleRDPStatus)
+	mux.HandleFunc("POST /api/instances/{name}/rdp/enable", grdMgr.HandleRDPEnable)
 	mux.HandleFunc("GET /api/instances/{name}/shell", h.ShellWS)
+	mux.HandleFunc("GET /websockify/{name}", vnc.HandleVNCProxy)
 	mux.HandleFunc("POST /api/instances/create", h.CreateInstance)
 	mux.HandleFunc("GET /api/templates", h.ListTemplates)
 	mux.HandleFunc("GET /api/info", h.GetInfo)
