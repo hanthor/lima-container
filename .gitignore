@@ -1,0 +1,11 @@
+# Compiled Go binary
+web/lima-web
+
+# Go build cache artifacts
+web/*.test
+
+# Editor artifacts
+.idea/
+.vscode/
+*.swp
+*.swo
