@@ -18,3 +18,60 @@ jobs:
           curl -fsS http://127.0.0.1:18006/vnc.html >/dev/null
           docker logs smoke | tail -n 50 || true
           docker rm -f smoke
+
+  smoke-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: web/go.mod
+
+      - name: Go unit tests (VNC WebSocket handler)
+        run: cd web && go test -v -count=1 ./...
+
+      - name: Build web image
+        run: docker build -f Dockerfile.web -t lima-web:smoke .
+
+      - name: Start container
+        run: |
+          docker run -d --name smoke-web -p 18006:8006 \
+            -e AUTO_START_LIMA=N lima-web:smoke
+          sleep 5
+
+      - name: Verify dashboard endpoint
+        run: curl -fsS http://127.0.0.1:18006/dashboard/ >/dev/null
+
+      - name: Verify WebSocket endpoint
+        run: |
+          python3 -c "
+          import http.client, base64, os, sys
+
+          conn = http.client.HTTPConnection('127.0.0.1', 18006)
+          key = base64.b64encode(os.urandom(16)).decode()
+          headers = {
+              'Upgrade': 'websocket',
+              'Connection': 'Upgrade',
+              'Sec-WebSocket-Key': key,
+              'Sec-WebSocket-Version': '13',
+              'Sec-WebSocket-Protocol': 'binary',
+          }
+          # Hit a nonexistent instance — expect 404 from the Go handler,
+          # not 502/503 (which would mean nginx can't reach the backend).
+          conn.request('GET', '/websockify/test-nonexistent', headers=headers)
+          resp = conn.getresponse()
+          print(f'Status: {resp.status} {resp.reason}')
+          assert resp.status != 502, 'Backend unreachable (502) — lima-web not running'
+          assert resp.status != 503, 'Backend unreachable (503) — lima-web not running'
+          assert resp.status == 404, f'Expected 404 for missing instance, got {resp.status}'
+          print('WebSocket endpoint is routed correctly through nginx to Go backend')
+          "
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs smoke-web 2>&1 | tail -n 80 || true
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f smoke-web || true
