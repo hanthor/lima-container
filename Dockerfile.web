@@ -1,5 +1,15 @@
 # syntax=docker/dockerfile:1
 
+# ── Stage 0: Fetch IronRDP WASM from npm ──
+FROM node:22-alpine AS wasm-fetch
+WORKDIR /wasm
+RUN npm pack ironrdp-wasm@1.0.1 --quiet 2>/dev/null && \
+    tar xzf ironrdp-wasm-*.tgz && \
+    mkdir -p /out && \
+    cp package/pkg/rdp_client.js /out/ && \
+    cp package/pkg/rdp_client_bg.wasm /out/ && \
+    cp package/pkg/rdp_client.d.ts /out/ 2>/dev/null || true
+
 # ── Stage 1: Build the Go web server ──
 FROM golang:1.24-alpine AS web-builder
 WORKDIR /src
@@ -52,6 +62,7 @@ COPY --chmod=0755 scripts/lima-as-user.sh /usr/local/bin/lima-as-user
 COPY --chmod=0644 templates/*.yaml /opt/lima/templates/
 COPY --from=web-builder /lima-web /usr/local/bin/lima-web
 COPY web/static/ /usr/share/lima-web/static/
+COPY --from=wasm-fetch /out/ /usr/share/lima-web/static/rdp/pkg/
 
 LABEL org.opencontainers.image.title="lima-web"
 
