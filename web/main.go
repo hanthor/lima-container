@@ -23,6 +23,7 @@ func main() {
 
 	lima := NewLimaCtl(limaHome)
 	vnc := NewVNCManager(limaHome)
+	rdpMgr := NewRDPManager(limaHome)
 	grdMgr := NewGRDManager(limaHome)
 
 	enabled := os.Getenv("LIMA_BOOTC_ENABLED") == "true"
@@ -31,7 +32,7 @@ func main() {
 		bootcMgr = NewBootcManager(lima)
 		log.Println("bootc-image-builder support enabled")
 	}
-	h := NewHandler(lima, vnc, bootcMgr)
+	h := NewHandler(lima, vnc, rdpMgr, bootcMgr)
 
 	// Scan for already-running instances and start their VNC bridges.
 	if instances, err := lima.List(); err == nil {
@@ -54,10 +55,12 @@ func main() {
 	mux.HandleFunc("POST /api/instances/{name}/restart", h.RestartInstance)
 	mux.HandleFunc("DELETE /api/instances/{name}", h.DeleteInstance)
 	mux.HandleFunc("GET /api/instances/{name}/vnc", h.GetVNC)
-	mux.HandleFunc("GET /api/instances/{name}/rdp", grdMgr.HandleRDPStatus)
+	mux.HandleFunc("GET /api/instances/{name}/rdp", h.GetRDP)
+	mux.HandleFunc("GET /api/instances/{name}/rdp/status", grdMgr.HandleRDPStatus)
 	mux.HandleFunc("POST /api/instances/{name}/rdp/enable", grdMgr.HandleRDPEnable)
 	mux.HandleFunc("GET /api/instances/{name}/shell", h.ShellWS)
 	mux.HandleFunc("GET /websockify/{name}", vnc.HandleVNCProxy)
+	mux.HandleFunc("GET /rdp/{name}", rdpMgr.HandleRDPProxy)
 	mux.HandleFunc("POST /api/instances/create", h.CreateInstance)
 	mux.HandleFunc("GET /api/templates", h.ListTemplates)
 	mux.HandleFunc("GET /api/info", h.GetInfo)

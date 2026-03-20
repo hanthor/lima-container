@@ -14,11 +14,12 @@ import (
 type Handler struct {
 	lima  *LimaCtl
 	vnc   *VNCManager
+	rdp   *RDPManager
 	bootc *BootcManager
 }
 
-func NewHandler(lima *LimaCtl, vnc *VNCManager, bootc *BootcManager) *Handler {
-	return &Handler{lima: lima, vnc: vnc, bootc: bootc}
+func NewHandler(lima *LimaCtl, vnc *VNCManager, rdp *RDPManager, bootc *BootcManager) *Handler {
+	return &Handler{lima: lima, vnc: vnc, rdp: rdp, bootc: bootc}
 }
 
 // --- response helpers ---
@@ -142,6 +143,16 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetVNC(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	info, err := h.vnc.GetVNCInfo(name)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeData(w, info)
+}
+
+func (h *Handler) GetRDP(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	info, err := h.rdp.GetRDPInfo(name)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
