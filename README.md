@@ -1,4 +1,4 @@
-# lima-qemu-container
+# lima-container
 
 Run Linux VMs with a graphical desktop, accessible in your browser — no host setup required.
 
@@ -8,11 +8,11 @@ Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots autom
 
 ```bash
 docker run -d \
-  --name lima-qemu \
+  --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
-  ghcr.io/<your-org>/lima-qemu:latest
+  ghcr.io/<your-org>/lima:latest
 ```
 
 Open [http://localhost:8006](http://localhost:8006). The default Ubuntu VM starts automatically.
@@ -23,9 +23,9 @@ No KVM? Drop `--device /dev/kvm` — the container falls back to software emulat
 
 ```yaml
 services:
-  lima-qemu:
-    image: ghcr.io/<your-org>/lima-qemu:latest
-    container_name: lima-qemu
+  lima:
+    image: ghcr.io/<your-org>/lima:latest
+    container_name: lima
     cap_add:
       - NET_ADMIN
     devices:
@@ -58,31 +58,31 @@ Disk images and custom YAMLs must be mounted into the container.
 
 ```bash
 docker run -d \
-  --name lima-qemu \
+  --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
   -e LIMA_TEMPLATE=/images/myvm.qcow2 \
   -v $PWD/images:/images \
-  ghcr.io/<your-org>/lima-qemu:latest
+  ghcr.io/<your-org>/lima:latest
 ```
 
 **Example — k8s template:**
 
 ```bash
 docker run -d \
-  --name lima-qemu \
+  --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
   -e LIMA_TEMPLATE=k8s \
-  ghcr.io/<your-org>/lima-qemu:latest
+  ghcr.io/<your-org>/lima:latest
 ```
 
 To list bundled templates inside the container:
 
 ```bash
-docker exec lima-qemu ls /opt/lima/templates/
+docker exec lima ls /opt/lima/templates/
 ```
 
 ## Environment variables
@@ -102,16 +102,16 @@ Disable auto-start with `AUTO_START_LIMA=N`, then manage VMs from the host:
 
 ```bash
 # Start a VM
-docker exec lima-qemu lima-up /opt/lima/templates/default.yaml
+docker exec lima lima-up /opt/lima/templates/default.yaml
 
 # List instances
-docker exec lima-qemu lima-as-user limactl list
+docker exec lima lima-as-user limactl list
 
 # Stop an instance
-docker exec lima-qemu lima-as-user limactl stop default
+docker exec lima lima-as-user limactl stop default
 
 # Delete an instance
-docker exec lima-qemu lima-as-user limactl delete default
+docker exec lima lima-as-user limactl delete default
 ```
 
 ### Persistent VM state

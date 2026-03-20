@@ -1,7 +1,7 @@
 services:
-  lima-qemu:
+  lima:
     build: .
-    container_name: lima-qemu
+    container_name: lima
     cap_add:
       - NET_ADMIN
     # Optional: expose /dev/kvm for hardware KVM acceleration (~10x faster than TCG).

@@ -10,10 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t lima-qemu:smoke .
+        run: docker build -t lima:smoke .
       - name: Run container and verify noVNC endpoint
         run: |
-          docker run -d --name smoke -p 18006:8006 lima-qemu:smoke
+          docker run -d --name smoke -p 18006:8006 lima:smoke
           sleep 5
           curl -fsS http://127.0.0.1:18006/vnc.html >/dev/null
           docker logs smoke | tail -n 50 || true

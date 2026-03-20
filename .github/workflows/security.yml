@@ -16,11 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t lima-qemu:scan .
+        run: docker build -t lima:scan .
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: lima-qemu:scan
+          image-ref: lima:scan
           format: sarif
           output: trivy-results.sarif
       - name: Upload SARIF
