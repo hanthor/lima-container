@@ -1,4 +1,13 @@
 # syntax=docker/dockerfile:1
+
+# ── Stage 1: Build the Go web server ──
+FROM golang:1.24-alpine AS web-builder
+WORKDIR /src
+COPY web/go.mod .
+COPY web/*.go .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /lima-web .
+
+# ── Stage 2: Final image ──
 FROM ghcr.io/qemus/qemu:latest
 
 ARG TARGETARCH
@@ -38,16 +47,16 @@ COPY --chmod=0755 scripts/lima-up.sh /usr/local/bin/lima-up
 COPY --chmod=0755 scripts/qemu-tcg-wrapper.sh /usr/local/bin/qemu-tcg-wrapper
 COPY --chmod=0755 scripts/lima-as-user.sh /usr/local/bin/lima-as-user
 COPY --chmod=0644 templates/*.yaml /opt/lima/templates/
+COPY --from=web-builder /lima-web /usr/local/bin/lima-web
+COPY web/static/ /usr/share/lima-web/static/
 
 ENV LIMA_HOME=/var/lib/lima
 ENV LIMA_USER=lima
 ENV WEB_PORT=8006
-ENV WSS_PORT=5700
-ENV LIMA_VNC_PORT=5901
+ENV LIMA_WEB_PORT=8080
 ENV LIMA_TEMPLATE=default
 ENV AUTO_START_LIMA=Y
 ENV LIMA_ACCEL_MODE=auto
-ENV LIMA_VNC_PORT_FILE=/run/lima-vnc-port
 
 EXPOSE 8006
 

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lima VM Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Lima VM Manager</h1>
+    <button id="btn-create" class="btn btn-primary">+ Create VM</button>
+  </header>
+
+  <div id="toast-area"></div>
+
+  <main>
+    <div id="instance-list" class="instance-grid">
+      <p class="placeholder">Loading instances…</p>
+    </div>
+  </main>
+
+  <!-- Create VM Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Create VM</h2>
+        <button id="modal-close" class="btn-icon" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="template-select">Template</label>
+        <select id="template-select">
+          <option value="">Loading templates…</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-submit-create" class="btn btn-primary">Create</button>
+      </div>
+      <div id="create-status" class="create-status hidden">
+        <div class="spinner"></div>
+        <span>Creating instance — this may take a few minutes…</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
