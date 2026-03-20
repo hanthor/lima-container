@@ -19,7 +19,7 @@ USER root
 
 RUN set -eux; \
     apt-get update; \
-  apt-get --no-install-recommends -y install ca-certificates curl jq openssh-client podman xz-utils; \
+  apt-get --no-install-recommends -y install ca-certificates curl fuse-overlayfs fuse3 jq openssh-client podman xz-utils; \
     case "${TARGETARCH}" in \
       amd64)  LIMA_ARCH="x86_64" ;; \
       arm64)  LIMA_ARCH="aarch64" ;; \
@@ -37,6 +37,19 @@ RUN set -eux; \
     chmod 1777 /tmp; \
     chown -R lima:lima /var/lib/lima /home/lima /workspace; \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Configure podman to use fuse-overlayfs so its storage is backed by FUSE
+# (not overlayfs). This allows bootc-image-builder's internal podman to mount
+# overlay on top of fuse-overlayfs without hitting the overlay-on-overlayfs error.
+RUN mkdir -p /etc/containers && cat > /etc/containers/storage.conf << 'EOF'
+[storage]
+driver = "overlay"
+runroot = "/run/containers/storage"
+graphroot = "/var/lib/containers/storage"
+
+[storage.options.overlay]
+mount_program = "/usr/bin/fuse-overlayfs"
+EOF
 
 COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/lima-entrypoint
 COPY --chmod=0755 scripts/preflight.sh /usr/local/bin/lima-preflight

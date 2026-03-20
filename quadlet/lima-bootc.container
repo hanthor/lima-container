@@ -17,6 +17,9 @@ Image=ghcr.io/YOUR_ORG/lima-bootc:latest
 # bootc-image-builder requires full privileges (loop devices, osbuild)
 PodmanArgs=--privileged
 
+# fuse-overlayfs inside the container needs /dev/fuse
+AddDevice=/dev/fuse
+
 # KVM acceleration (remove if your host has no /dev/kvm)
 AddDevice=/dev/kvm
 AddDevice=/dev/net/tun

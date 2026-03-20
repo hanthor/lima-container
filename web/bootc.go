@@ -219,12 +219,17 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		}()
 	}
 
-	// Run bootc-image-builder via podman
+	// Run bootc-image-builder via podman.
+	// Share /var/lib/containers/storage so bib uses our existing overlay storage
+	// (avoids overlay-on-overlayfs failures inside the privileged container) and
+	// can access locally-built derived images without a registry push.
 	cmd := exec.Command("podman", "run",
 		"--rm",
 		"--privileged",
+		"--device", "/dev/fuse",
 		"--pull=newer",
 		"-v", outDir+":/output",
+		"-v", "/var/lib/containers/storage:/var/lib/containers/storage",
 		bibImage,
 		"--type", "qcow2",
 		"--output", "/output",
