@@ -72,30 +72,16 @@ Before calling `bootc install`, the backend can apply customizations by generati
 
 ## REST API
 
+See [api.md](api.md#bootc-builds-lima-bootc-image-only) for the full bootc build API reference, including request/response shapes and SSE log streaming.
+
+Quick reference:
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/bootc/builds` | Start a build |
 | `GET` | `/api/bootc/builds` | List all builds with status |
 | `GET` | `/api/bootc/builds/:id` | Get build status |
 | `GET` | `/api/bootc/builds/:id/log` | Stream build log (SSE) |
-| `DELETE` | `/api/bootc/builds/:id` | Cancel / clean up a build |
-
-**Request body for `POST /api/bootc/builds`:**
-
-```json
-{
-  "image": "quay.io/fedora/fedora-bootc:42",
-  "vm_name": "my-fedora-vm",
-  "customizations": {
-    "enable_ssh": true,
-    "enable_rdp": false,
-    "extra_packages": ["vim", "curl"],
-    "extra_containerfile": "RUN echo 'welcome' > /etc/motd"
-  }
-}
-```
-
-All `customizations` fields are optional. Omit the `customizations` key entirely to use the image directly.
 
 ## Storage
 
@@ -208,38 +194,7 @@ Before calling `bootc-image-builder`, the backend can apply customizations by ge
 
 ## REST API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/bootc/builds` | Start a build |
-| `GET` | `/api/bootc/builds` | List all builds with status |
-| `GET` | `/api/bootc/builds/:id` | Get build status |
-| `GET` | `/api/bootc/builds/:id/log` | Stream build log (SSE) |
-| `DELETE` | `/api/bootc/builds/:id` | Cancel / clean up a build |
-
-**Request body for `POST /api/bootc/builds`:**
-
-```json
-{
-  "image": "quay.io/fedora/fedora-bootc:42",
-  "vm_name": "my-fedora-vm",
-  "customizations": {
-    "enable_ssh": true,
-    "enable_rdp": false,
-    "extra_packages": ["vim", "curl"],
-    "extra_containerfile": "RUN echo 'welcome' > /etc/motd"
-  }
-}
-```
-
-All `customizations` fields are optional. Omit the `customizations` key entirely to skip the customization step and pass the image directly to `bootc-image-builder`.
-
-## Storage
-
-Built qcow2 images are stored at `/var/lib/lima-bootc-builds/<id>/qcow2/disk.qcow2`. Mount a named volume to persist them across container restarts:
-
-```bash
--v lima-bootc-builds:/var/lib/lima-bootc-builds
-```
+See [api.md](api.md#bootc-builds-lima-bootc-image-only) for the full bootc build API reference.
 
 ## How it works internally
 
