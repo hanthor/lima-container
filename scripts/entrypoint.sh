@@ -15,6 +15,11 @@ chown lima:lima "${LIMA_HOME}" 2>/dev/null || true
 /usr/local/bin/lima-preflight || true
 
 cat > /etc/nginx/conf.d/default.conf <<NGINX
+map \$http_upgrade \$connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
 server {
   listen ${WEB_PORT} default_server;
   server_name _;
@@ -26,8 +31,12 @@ server {
   }
 
   location /api/ {
+    proxy_http_version 1.1;
     proxy_pass http://127.0.0.1:${LIMA_WEB_PORT}/api/;
     proxy_read_timeout 600s;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_set_header Host \$host;
   }
 
   # noVNC static files — shared by all instances
