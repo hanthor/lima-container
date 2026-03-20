@@ -29,7 +29,7 @@ func main() {
 	enabled := os.Getenv("LIMA_BOOTC_ENABLED") == "true"
 	var bootcMgr *BootcManager
 	if enabled {
-		bootcMgr = NewBootcManager(lima)
+		bootcMgr = NewBootcManager(lima, "")
 		log.Println("bootc-image-builder support enabled")
 	}
 	h := NewHandler(lima, vnc, rdpMgr, bootcMgr, NewTemplates())

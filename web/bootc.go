@@ -63,15 +63,20 @@ type BootcBuild struct {
 }
 
 type BootcManager struct {
-	mu     sync.RWMutex
-	builds map[string]*BootcBuild
-	lima   *LimaCtl
+	mu        sync.RWMutex
+	builds    map[string]*BootcBuild
+	lima      *LimaCtl
+	buildsDir string
 }
 
-func NewBootcManager(lima *LimaCtl) *BootcManager {
+func NewBootcManager(lima *LimaCtl, buildsDir string) *BootcManager {
+	if buildsDir == "" {
+		buildsDir = bootcBuildsDir
+	}
 	return &BootcManager{
-		builds: make(map[string]*BootcBuild),
-		lima:   lima,
+		builds:    make(map[string]*BootcBuild),
+		lima:      lima,
+		buildsDir: buildsDir,
 	}
 }
 
@@ -82,7 +87,7 @@ func (b *BootcManager) StartBuild(sourceImage, vmName string, customizations *Cu
 		vmName = id
 	}
 
-	outDir := filepath.Join(bootcBuildsDir, id)
+	outDir := filepath.Join(b.buildsDir, id)
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return nil, fmt.Errorf("creating build dir: %w", err)
 	}
