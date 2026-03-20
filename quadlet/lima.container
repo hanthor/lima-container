@@ -1,0 +1,30 @@
+# Lima (plain) — single-VM noVNC
+# Place in ~/.config/containers/systemd/ (user) or /etc/containers/systemd/ (system)
+# Then: systemctl --user daemon-reload && systemctl --user start lima
+#
+# Access noVNC at http://localhost:8006
+
+[Unit]
+Description=Lima — single VM with noVNC browser access
+After=network-online.target
+
+[Container]
+Image=ghcr.io/YOUR_ORG/lima:latest
+
+AddDevice=/dev/kvm
+AddDevice=/dev/net/tun
+AddCapability=NET_ADMIN
+
+PublishPort=8006:8006
+
+Volume=%h/.lima:/var/lib/lima:z
+
+Environment=LIMA_TEMPLATE=default
+Environment=LIMA_ACCEL_MODE=auto
+
+[Service]
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

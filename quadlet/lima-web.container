@@ -1,0 +1,35 @@
+# Lima Web — multi-VM dashboard
+# Place in ~/.config/containers/systemd/ (user) or /etc/containers/systemd/ (system)
+# Then: systemctl --user daemon-reload && systemctl --user start lima-web
+#
+# Access the dashboard at http://localhost:8006
+
+[Unit]
+Description=Lima Web — Lima VM management dashboard
+After=network-online.target
+
+[Container]
+Image=ghcr.io/YOUR_ORG/lima-web:latest
+
+# KVM acceleration (remove if your host has no /dev/kvm)
+AddDevice=/dev/kvm
+AddDevice=/dev/net/tun
+
+# Network capability required by Lima
+AddCapability=NET_ADMIN
+
+PublishPort=8006:8006
+
+# Persistent VM state — VMs survive container restarts
+Volume=%h/.lima:/var/lib/lima:z
+
+Environment=LIMA_TEMPLATE=default
+Environment=LIMA_ACCEL_MODE=auto
+Environment=AUTO_START_LIMA=N
+
+[Service]
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

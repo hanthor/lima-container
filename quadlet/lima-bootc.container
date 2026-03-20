@@ -1,0 +1,44 @@
+# Lima Bootc — VM dashboard + bootc-image-builder
+# Place in ~/.config/containers/systemd/ (user) or /etc/containers/systemd/ (system)
+# Then: systemctl --user daemon-reload && systemctl --user start lima-bootc
+#
+# ⚠ Requires --privileged equivalent: Privileged=true
+#   bootc-image-builder uses loop devices and osbuild internally.
+#
+# Access the dashboard at http://localhost:8006
+
+[Unit]
+Description=Lima Bootc — Lima VM dashboard with bootc image builder
+After=network-online.target
+
+[Container]
+Image=ghcr.io/YOUR_ORG/lima-bootc:latest
+
+# bootc-image-builder requires full privileges (loop devices, osbuild)
+PodmanArgs=--privileged
+
+# KVM acceleration (remove if your host has no /dev/kvm)
+AddDevice=/dev/kvm
+AddDevice=/dev/net/tun
+
+# Network capability required by Lima
+AddCapability=NET_ADMIN
+
+PublishPort=8006:8006
+
+# Persistent VM state
+Volume=%h/.lima:/var/lib/lima:z
+# Persist bootc build artifacts (qcow2 images) across container restarts
+Volume=lima-bootc-builds:/var/lib/lima-bootc-builds
+
+Environment=LIMA_TEMPLATE=default
+Environment=LIMA_ACCEL_MODE=auto
+Environment=AUTO_START_LIMA=N
+Environment=LIMA_BOOTC_ENABLED=true
+
+[Service]
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

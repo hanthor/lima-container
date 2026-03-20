@@ -255,14 +255,15 @@ func (h *Handler) CreateBootcBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Image  string `json:"image"`
-		VMName string `json:"vm_name"`
+		Image          string          `json:"image"`
+		VMName         string          `json:"vm_name"`
+		Customizations *Customizations `json:"customizations,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Image == "" {
 		writeError(w, http.StatusBadRequest, "image is required")
 		return
 	}
-	build, err := h.bootc.StartBuild(req.Image, req.VMName)
+	build, err := h.bootc.StartBuild(req.Image, req.VMName, req.Customizations)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

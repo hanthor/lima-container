@@ -445,11 +445,19 @@ function viewBuildLog(buildId) {
 var bootcOverlay = document.getElementById("bootc-modal-overlay");
 var bootcImageInput = document.getElementById("bootc-image-input");
 var bootcNameInput = document.getElementById("bootc-name-input");
+var bootcSshCheck = document.getElementById("bootc-ssh-check");
+var bootcRdpCheck = document.getElementById("bootc-rdp-check");
+var bootcPackagesInput = document.getElementById("bootc-packages-input");
+var bootcContainerfileInput = document.getElementById("bootc-containerfile-input");
 
 function openBootcModal() {
   bootcOverlay.classList.remove("hidden");
   bootcImageInput.value = "";
   bootcNameInput.value = "";
+  bootcSshCheck.checked = false;
+  bootcRdpCheck.checked = false;
+  bootcPackagesInput.value = "";
+  bootcContainerfileInput.value = "";
   bootcImageInput.focus();
 }
 
@@ -464,9 +472,27 @@ async function submitBootcBuild() {
     return;
   }
   var vmName = bootcNameInput.value.trim();
+
+  // Collect customizations (only include if any are set)
+  var extraPackages = bootcPackagesInput.value.trim().split(/\s+/).filter(Boolean);
+  var extraContainerfile = bootcContainerfileInput.value.trim();
+  var enableSSH = bootcSshCheck.checked;
+  var enableRDP = bootcRdpCheck.checked;
+  var hasCustomizations = enableSSH || enableRDP || extraPackages.length > 0 || extraContainerfile;
+
+  var body = { image: image, vm_name: vmName };
+  if (hasCustomizations) {
+    body.customizations = {
+      enable_ssh: enableSSH,
+      enable_rdp: enableRDP,
+      extra_packages: extraPackages,
+      extra_containerfile: extraContainerfile,
+    };
+  }
+
   closeBootcModal();
   try {
-    var result = await api("POST", "/api/bootc/builds", { image: image, vm_name: vmName });
+    var result = await api("POST", "/api/bootc/builds", body);
     showToast("Build started: " + result.id, "success");
     refreshBootcBuilds();
     viewBuildLog(result.id);

@@ -42,6 +42,27 @@
         <label for="bootc-name-input" style="margin-top:0.5rem;">VM name (optional)</label>
         <input type="text" id="bootc-name-input" placeholder="auto-generated"
                style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+
+        <!-- Customizations -->
+        <details style="margin-top:1rem;">
+          <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text-muted);user-select:none;">
+            Customizations (optional)
+          </summary>
+          <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.5rem;">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
+              <input type="checkbox" id="bootc-ssh-check"> Enable SSH (install &amp; enable sshd)
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
+              <input type="checkbox" id="bootc-rdp-check"> Enable RDP (install &amp; enable xrdp)
+            </label>
+            <label for="bootc-packages-input" style="font-size:0.9rem;margin-top:0.25rem;">Extra packages (space-separated)</label>
+            <input type="text" id="bootc-packages-input" placeholder="vim curl htop"
+                   style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+            <label for="bootc-containerfile-input" style="font-size:0.9rem;margin-top:0.25rem;">Custom Containerfile instructions (advanced)</label>
+            <textarea id="bootc-containerfile-input" rows="4" placeholder="RUN echo 'hello' > /etc/motd"
+                      style="padding:0.5rem 0.65rem;font-size:0.85rem;font-family:monospace;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;resize:vertical;"></textarea>
+          </div>
+        </details>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="bootc-btn-cancel">Cancel</button>
