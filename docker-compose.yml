@@ -1,0 +1,20 @@
+services:
+  lima-qemu:
+    build: .
+    container_name: lima-qemu
+    cap_add:
+      - NET_ADMIN
+    # Optional: expose /dev/kvm for hardware KVM acceleration (~10x faster than TCG).
+    # Remove the devices block if your host has no /dev/kvm or nested virtualization
+    # is not available. The image runs in TCG (software emulation) mode automatically.
+    devices:
+      - /dev/kvm
+    environment:
+      LIMA_TEMPLATE: "default"   # template name, path to .yaml, or path to .qcow2/.img/.raw
+      LIMA_ACCEL_MODE: "auto"    # auto | kvm | tcg
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./workspace:/workspace
+      - ./lima-state:/var/lib/lima
+    restart: unless-stopped

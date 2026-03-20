@@ -1,0 +1,19 @@
+# Experimental Lima template intended for containerized usage.
+# Update resource values as needed before first start.
+images:
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+    arch: "x86_64"
+  - location: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+cpus: 2
+memory: "4GiB"
+disk: "30GiB"
+
+mounts:
+  - location: "/workspace"
+    writable: true
+
+# This keeps the VM display reachable over VNC for the noVNC bridge.
+video:
+  display: "vnc"

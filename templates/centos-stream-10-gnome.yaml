@@ -1,0 +1,38 @@
+# CentOS Stream 10 desktop test template for GUI validation over noVNC.
+images:
+  - location: "https://cloud.centos.org/centos/10-stream/x86_64/images/CentOS-Stream-GenericCloud-10-latest.x86_64.qcow2"
+    arch: "x86_64"
+  - location: "https://cloud.centos.org/centos/10-stream/aarch64/images/CentOS-Stream-GenericCloud-10-latest.aarch64.qcow2"
+    arch: "aarch64"
+
+cpus: 4
+memory: "8GiB"
+disk: "40GiB"
+
+# Use legacy BIOS (SeaBIOS) instead of UEFI so that Lima does not require a
+# writable OVMF_VARS pflash file, which it omits when only OVMF_CODE is found.
+# SeaBIOS respects -boot order=c and boots from virtio disk directly.
+firmware:
+  legacyBIOS: true
+
+mounts:
+  - location: "/workspace"
+    writable: true
+
+video:
+  display: "vnc"
+
+containerd:
+  system: false
+  user: false
+
+provision:
+  - mode: system
+    script: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+      dnf makecache
+      dnf group install -y "Server with GUI"
+      dnf install -y firefox
+      systemctl set-default graphical.target
+      systemctl enable gdm
