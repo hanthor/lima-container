@@ -18,6 +18,7 @@ cat > /etc/nginx/conf.d/default.conf <<NGINX
 server {
   listen ${WEB_PORT} default_server;
   server_name _;
+  absolute_redirect off;
 
   # Dashboard and API — proxy to lima-web Go server
   location /dashboard/ {
