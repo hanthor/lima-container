@@ -7,6 +7,11 @@
   padding: 0;
 }
 
+/* ── Utility ─────────────────────────────────────────────── */
+.hidden {
+  display: none !important;
+}
+
 :root {
   --bg: #0d1117;
   --surface: #161b22;
@@ -302,6 +307,10 @@ main {
 }
 
 .modal-body select:focus {
+  border-color: var(--accent);
+}
+
+input[type="text"]:focus {
   border-color: var(--accent);
 }
 

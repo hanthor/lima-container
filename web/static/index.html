@@ -9,7 +9,10 @@
 <body>
   <header>
     <h1>Lima VM Manager</h1>
-    <button id="btn-create" class="btn btn-primary">+ Create VM</button>
+    <div style="display:flex;gap:0.5rem;">
+      <button id="btn-bootc" class="btn btn-secondary hidden">Build from bootc image</button>
+      <button id="btn-create" class="btn btn-primary">+ Create VM</button>
+    </div>
   </header>
 
   <div id="toast-area"></div>
@@ -18,7 +21,34 @@
     <div id="instance-list" class="instance-grid">
       <p class="placeholder">Loading instances…</p>
     </div>
+
+    <section id="bootc-section" class="hidden" style="margin-top:2rem;">
+      <h2 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-muted);">bootc Builds</h2>
+      <div id="bootc-builds-list" class="instance-grid"></div>
+    </section>
   </main>
+
+  <!-- bootc Modal -->
+  <div id="bootc-modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Build from bootc image</h2>
+        <button class="btn-icon" id="bootc-modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <label for="bootc-image-input">Container image URI</label>
+        <input type="text" id="bootc-image-input" placeholder="quay.io/fedora/fedora-bootc:42"
+               style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+        <label for="bootc-name-input" style="margin-top:0.5rem;">VM name (optional)</label>
+        <input type="text" id="bootc-name-input" placeholder="auto-generated"
+               style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="bootc-btn-cancel">Cancel</button>
+        <button class="btn btn-primary" id="bootc-btn-submit">Start Build</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Create VM Modal -->
   <div id="modal-overlay" class="modal-overlay hidden">

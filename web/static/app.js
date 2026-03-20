@@ -342,8 +342,146 @@ async function pollUntilRunning(name) {
   }, 5000);
 }
 
-/* ── Event Listeners ─────────────────────────────────────── */
+/* ── bootc Feature Detection ─────────────────────────────── */
 
+async function detectBootc() {
+  try {
+    var info = await api("GET", "/api/info");
+    if (info && info.bootc_enabled) {
+      document.getElementById("btn-bootc").classList.remove("hidden");
+      document.getElementById("bootc-section").classList.remove("hidden");
+      startBootcRefresh();
+    }
+  } catch (_) {}
+}
+
+/* ── bootc Builds ────────────────────────────────────────── */
+
+var bootcRefreshTimer = null;
+
+function startBootcRefresh() {
+  refreshBootcBuilds();
+  bootcRefreshTimer = setInterval(refreshBootcBuilds, 5000);
+}
+
+async function refreshBootcBuilds() {
+  try {
+    var builds = await api("GET", "/api/bootc/builds");
+    renderBootcBuilds(builds || []);
+  } catch (_) {}
+}
+
+function renderBootcBuilds(builds) {
+  var el = document.getElementById("bootc-builds-list");
+  if (!builds || builds.length === 0) {
+    el.innerHTML = '<p class="placeholder">No bootc builds yet.</p>';
+    return;
+  }
+  el.innerHTML = "";
+  // Sort newest first
+  builds.slice().reverse().forEach(function (b) {
+    var card = document.createElement("div");
+    card.className = "instance-card";
+    var statusCls = b.status === "complete" ? "badge-running"
+                  : b.status === "failed" ? "badge-stopped"
+                  : "badge-other";
+    card.innerHTML =
+      '<div class="card-header">' +
+        '<h3>' + escapeHtml(b.vm_name || b.id) + '</h3>' +
+        '<span class="badge ' + statusCls + '">' + escapeHtml(b.status) + '</span>' +
+      '</div>' +
+      '<div class="card-meta">' +
+        '<span><span class="meta-label">Image</span> ' + escapeHtml(b.source_image) + '</span>' +
+      '</div>' +
+      (b.error ? '<div style="font-size:0.8rem;color:var(--red);margin-top:0.25rem;">' + escapeHtml(b.error) + '</div>' : '') +
+      '<div class="card-actions">' +
+        '<button class="btn btn-secondary" onclick="viewBuildLog(\'' + escapeHtml(b.id) + '\')">View Log</button>' +
+      '</div>';
+    el.appendChild(card);
+  });
+}
+
+function viewBuildLog(buildId) {
+  var overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:300;display:flex;flex-direction:column;padding:1rem;";
+
+  var header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;";
+  header.innerHTML = '<span style="color:var(--text);font-weight:600;">Build Log: ' + escapeHtml(buildId) + '</span>';
+  var closeBtn = document.createElement("button");
+  closeBtn.className = "btn btn-secondary";
+  closeBtn.textContent = "Close";
+  closeBtn.onclick = function () { document.body.removeChild(overlay); };
+  header.appendChild(closeBtn);
+
+  var pre = document.createElement("pre");
+  pre.style.cssText = "flex:1;overflow:auto;background:var(--bg);color:var(--text);padding:1rem;border-radius:var(--radius);font-size:0.8rem;line-height:1.5;border:1px solid var(--border);";
+  pre.textContent = "Loading log...\n";
+
+  overlay.appendChild(header);
+  overlay.appendChild(pre);
+  document.body.appendChild(overlay);
+
+  var evtSource = new EventSource("/api/bootc/builds/" + encodeURIComponent(buildId) + "/log");
+  evtSource.onmessage = function (e) {
+    if (pre.textContent === "Loading log...\n") pre.textContent = "";
+    if (e.data.startsWith("[DONE")) {
+      evtSource.close();
+      refreshBootcBuilds();
+      refreshInstances();
+      return;
+    }
+    pre.textContent += e.data + "\n";
+    pre.scrollTop = pre.scrollHeight;
+  };
+  evtSource.onerror = function () { evtSource.close(); };
+
+  var origClose = closeBtn.onclick;
+  closeBtn.onclick = function () { evtSource.close(); origClose(); };
+}
+
+/* ── bootc Modal ─────────────────────────────────────────── */
+
+var bootcOverlay = document.getElementById("bootc-modal-overlay");
+var bootcImageInput = document.getElementById("bootc-image-input");
+var bootcNameInput = document.getElementById("bootc-name-input");
+
+function openBootcModal() {
+  bootcOverlay.classList.remove("hidden");
+  bootcImageInput.value = "";
+  bootcNameInput.value = "";
+  bootcImageInput.focus();
+}
+
+function closeBootcModal() {
+  bootcOverlay.classList.add("hidden");
+}
+
+async function submitBootcBuild() {
+  var image = bootcImageInput.value.trim();
+  if (!image) {
+    showToast("Enter a container image URI", "error");
+    return;
+  }
+  var vmName = bootcNameInput.value.trim();
+  closeBootcModal();
+  try {
+    var result = await api("POST", "/api/bootc/builds", { image: image, vm_name: vmName });
+    showToast("Build started: " + result.id, "success");
+    refreshBootcBuilds();
+    viewBuildLog(result.id);
+  } catch (err) {
+    showToast("Build failed to start: " + err.message, "error");
+  }
+}
+
+document.getElementById("btn-bootc").addEventListener("click", openBootcModal);
+document.getElementById("bootc-modal-close").addEventListener("click", closeBootcModal);
+document.getElementById("bootc-btn-cancel").addEventListener("click", closeBootcModal);
+document.getElementById("bootc-btn-submit").addEventListener("click", submitBootcBuild);
+bootcOverlay.addEventListener("click", function (e) { if (e.target === bootcOverlay) closeBootcModal(); });
+
+/* ── Event Listeners ─────────────────────────────────────── */
 btnCreate.addEventListener("click", openModal);
 btnClose.addEventListener("click", closeModal);
 btnCancel.addEventListener("click", closeModal);
@@ -357,8 +495,12 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "Escape" && !overlay.classList.contains("hidden")) {
     closeModal();
   }
+  if (e.key === "Escape" && !bootcOverlay.classList.contains("hidden")) {
+    closeBootcModal();
+  }
 });
 
 /* ── Init ────────────────────────────────────────────────── */
 
 startAutoRefresh();
+detectBootc();
