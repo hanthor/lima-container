@@ -12,15 +12,16 @@ import (
 
 // Handler holds dependencies for HTTP handlers.
 type Handler struct {
-	lima  *LimaCtl
-	vnc   *VNCManager
-	rdp   *RDPManager
-	bootc *BootcManager
-	tmpl  *Templates
+	lima   *LimaCtl
+	vnc    *VNCManager
+	rdp    *RDPManager
+	bootc  *BootcManager
+	tmpl   *Templates
+	upload *UploadManager
 }
 
-func NewHandler(lima *LimaCtl, vnc *VNCManager, rdp *RDPManager, bootc *BootcManager, tmpl *Templates) *Handler {
-	return &Handler{lima: lima, vnc: vnc, rdp: rdp, bootc: bootc, tmpl: tmpl}
+func NewHandler(lima *LimaCtl, vnc *VNCManager, rdp *RDPManager, bootc *BootcManager, tmpl *Templates, upload *UploadManager) *Handler {
+	return &Handler{lima: lima, vnc: vnc, rdp: rdp, bootc: bootc, tmpl: tmpl, upload: upload}
 }
 
 // --- response helpers ---
@@ -351,6 +352,9 @@ func (h *Handler) CreateBootcBuild(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Image          string          `json:"image"`
 		VMName         string          `json:"vm_name"`
+		DiskSize       string          `json:"disk_size"`
+		CPUs           int             `json:"cpus"`
+		Memory         string          `json:"memory"`
 		Customizations *Customizations `json:"customizations,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Image == "" {
@@ -358,7 +362,7 @@ func (h *Handler) CreateBootcBuild(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "image is required")
 		return
 	}
-	build, err := h.bootc.StartBuild(req.Image, req.VMName, req.Customizations)
+	build, err := h.bootc.StartBuild(req.Image, req.VMName, req.Customizations, req.DiskSize, req.CPUs, req.Memory)
 	if err != nil {
 		htmxToast(w, "Build failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())

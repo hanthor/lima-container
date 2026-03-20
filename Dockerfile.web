@@ -64,6 +64,8 @@ COPY --from=web-builder /lima-web /usr/local/bin/lima-web
 COPY web/static/ /usr/share/lima-web/static/
 COPY --from=wasm-fetch /out/ /usr/share/lima-web/static/rdp/pkg/
 
+RUN mkdir -p /var/lib/lima-uploads && chown lima:lima /var/lib/lima-uploads
+
 LABEL org.opencontainers.image.title="lima-web"
 
 ENV LIMA_HOME=/var/lib/lima
@@ -73,6 +75,7 @@ ENV LIMA_WEB_PORT=8080
 ENV LIMA_TEMPLATE=default
 ENV AUTO_START_LIMA=Y
 ENV LIMA_ACCEL_MODE=auto
+ENV LIMA_UPLOAD_DIR=/var/lib/lima-uploads
 ENV TLS_CERT=""
 ENV TLS_KEY=""
 

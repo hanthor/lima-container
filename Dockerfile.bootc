@@ -77,6 +77,7 @@ COPY web/static/ /usr/share/lima-web/static/
 COPY --from=wasm-fetch /out/ /usr/share/lima-web/static/rdp/pkg/
 
 RUN mkdir -p /var/lib/lima-bootc-builds && chown lima:lima /var/lib/lima-bootc-builds
+RUN mkdir -p /var/lib/lima-uploads && chown lima:lima /var/lib/lima-uploads
 
 LABEL org.opencontainers.image.title="lima-bootc"
 
@@ -87,6 +88,7 @@ ENV LIMA_WEB_PORT=8080
 ENV LIMA_TEMPLATE=default
 ENV AUTO_START_LIMA=Y
 ENV LIMA_ACCEL_MODE=auto
+ENV LIMA_UPLOAD_DIR=/var/lib/lima-uploads
 ENV LIMA_BOOTC_ENABLED=true
 ENV TLS_CERT=""
 ENV TLS_KEY=""

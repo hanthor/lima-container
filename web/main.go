@@ -26,13 +26,19 @@ func main() {
 	rdpMgr := NewRDPManager(limaHome)
 	grdMgr := NewGRDManager(limaHome)
 
+	uploadDir := os.Getenv("LIMA_UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "/var/lib/lima-uploads"
+	}
+	uploadMgr := NewUploadManager(uploadDir)
+
 	enabled := os.Getenv("LIMA_BOOTC_ENABLED") == "true"
 	var bootcMgr *BootcManager
 	if enabled {
 		bootcMgr = NewBootcManager(lima, "")
 		log.Println("bootc-image-builder support enabled")
 	}
-	h := NewHandler(lima, vnc, rdpMgr, bootcMgr, NewTemplates())
+	h := NewHandler(lima, vnc, rdpMgr, bootcMgr, NewTemplates(), uploadMgr)
 
 	// Scan for already-running instances and start their VNC bridges.
 	if instances, err := lima.List(); err == nil {
@@ -62,6 +68,8 @@ func main() {
 	mux.HandleFunc("GET /websockify/{name}", vnc.HandleVNCProxy)
 	mux.HandleFunc("GET /rdp/{name}", rdpMgr.HandleRDPProxy)
 	mux.HandleFunc("POST /api/instances/create", h.CreateInstance)
+	mux.HandleFunc("POST /api/images/upload", h.HandleUploadImage)
+	mux.HandleFunc("POST /api/images/fetch", h.HandleFetchImage)
 	mux.HandleFunc("GET /api/templates", h.ListTemplates)
 	mux.HandleFunc("GET /api/info", h.GetInfo)
 	mux.HandleFunc("GET /api/bootc/builds", h.ListBootcBuilds)

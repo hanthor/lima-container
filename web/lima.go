@@ -57,6 +57,9 @@ func NewLimaCtl(home string) *LimaCtl {
 	return &LimaCtl{home: home}
 }
 
+// Home returns the LIMA_HOME directory path.
+func (l *LimaCtl) Home() string { return l.home }
+
 // run executes lima-as-user limactl <args> and returns stdout.
 func (l *LimaCtl) run(args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"limactl"}, args...)
@@ -142,11 +145,17 @@ func (l *LimaCtl) Create(templatePath, name string) error {
 // CreateBootc starts a VM built from a bootc image. bootc VMs don't run
 // cloud-init so Lima's SSH provisioning will time out; we use a short timeout
 // and let the caller check IsRunning() to determine actual success.
-func (l *LimaCtl) CreateBootc(qcow2Path, name string) error {
+func (l *LimaCtl) CreateBootc(qcow2Path, name string, cpus int, memory string) error {
 	l.writeMu.Lock()
 	defer l.writeMu.Unlock()
 
 	args := []string{"start", "--tty=false", "--timeout=3m"}
+	if cpus > 0 {
+		args = append(args, fmt.Sprintf("--cpus=%d", cpus))
+	}
+	if memory != "" {
+		args = append(args, fmt.Sprintf("--memory=%s", memory))
+	}
 	if name != "" {
 		args = append(args, "--name="+name)
 	}
