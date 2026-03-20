@@ -371,6 +371,7 @@ func (b *BootcManager) StreamLog(id string, w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx proxy buffering for SSE
 	flusher, canFlush := w.(http.Flusher)
 
 	f, err := os.Open(build.LogPath)

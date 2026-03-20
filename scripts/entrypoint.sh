@@ -61,6 +61,7 @@ server {
     proxy_http_version 1.1;
     proxy_pass http://127.0.0.1:${LIMA_WEB_PORT}/api/;
     proxy_read_timeout 600s;
+    proxy_buffering off;
     proxy_set_header Upgrade \$http_upgrade;
     proxy_set_header Connection \$connection_upgrade;
     proxy_set_header Host \$host;
