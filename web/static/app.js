@@ -123,6 +123,108 @@ async function openConsole(name) {
   }
 }
 
+/* ── Terminal (xterm.js + WebSocket) ──────────────────────── */
+
+var termOverlay = document.getElementById("terminal-modal-overlay");
+var termContainer = document.getElementById("terminal-container");
+var termTitle = document.getElementById("terminal-modal-title");
+var termCloseBtn = document.getElementById("terminal-modal-close");
+var activeTerm = null;
+var activeFit = null;
+var activeWs = null;
+var termResizeHandler = null;
+
+function openTerminal(name) {
+  termTitle.textContent = "Terminal — " + name;
+  termOverlay.classList.remove("hidden");
+  termContainer.innerHTML = "";
+
+  var term = new Terminal({
+    cursorBlink: true,
+    fontSize: 14,
+    theme: { background: "#0d1117", foreground: "#e6edf3" },
+  });
+  var fitAddon = new FitAddon.FitAddon();
+  var webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(webLinksAddon);
+  term.open(termContainer);
+
+  // Small delay lets the DOM settle so fitAddon measures correctly
+  setTimeout(function () { fitAddon.fit(); }, 50);
+
+  var wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  var ws = new WebSocket(wsProto + "//" + location.host + "/api/instances/" + encodeURIComponent(name) + "/shell");
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = function () {
+    // Send initial size once connected
+    fitAddon.fit();
+    var dims = fitAddon.proposeDimensions();
+    if (dims) {
+      ws.send(JSON.stringify({ type: "resize", cols: dims.cols, rows: dims.rows }));
+    }
+  };
+
+  ws.onmessage = function (e) {
+    term.write(new Uint8Array(e.data));
+  };
+
+  ws.onerror = function () {
+    term.write("\r\n\x1b[31m[connection error]\x1b[0m\r\n");
+  };
+
+  ws.onclose = function () {
+    term.write("\r\n\x1b[33m[connection closed]\x1b[0m\r\n");
+  };
+
+  term.onData(function (data) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(new TextEncoder().encode(data));
+    }
+  });
+
+  term.onResize(function (size) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "resize", cols: size.cols, rows: size.rows }));
+    }
+  });
+
+  termResizeHandler = function () {
+    fitAddon.fit();
+  };
+  window.addEventListener("resize", termResizeHandler);
+
+  activeTerm = term;
+  activeFit = fitAddon;
+  activeWs = ws;
+
+  term.focus();
+}
+
+function closeTerminal() {
+  if (activeWs) {
+    activeWs.close();
+    activeWs = null;
+  }
+  if (activeTerm) {
+    activeTerm.dispose();
+    activeTerm = null;
+  }
+  activeFit = null;
+  if (termResizeHandler) {
+    window.removeEventListener("resize", termResizeHandler);
+    termResizeHandler = null;
+  }
+  termContainer.innerHTML = "";
+  termOverlay.classList.add("hidden");
+}
+
+termCloseBtn.addEventListener("click", closeTerminal);
+termOverlay.addEventListener("click", function (e) {
+  if (e.target === termOverlay) closeTerminal();
+});
+
 /* ── Render Instances ────────────────────────────────────── */
 
 var listEl = document.getElementById("instance-list");
@@ -186,6 +288,11 @@ function renderInstances(instances) {
       actions.appendChild(
         makeBtn("Console", "btn btn-blue", function () {
           openConsole(inst.name);
+        })
+      );
+      actions.appendChild(
+        makeBtn("Terminal", "btn btn-secondary", function () {
+          openTerminal(inst.name);
         })
       );
     } else if (isStopped) {
@@ -523,6 +630,9 @@ document.addEventListener("keydown", function (e) {
   }
   if (e.key === "Escape" && !bootcOverlay.classList.contains("hidden")) {
     closeBootcModal();
+  }
+  if (e.key === "Escape" && !termOverlay.classList.contains("hidden")) {
+    closeTerminal();
   }
 });
 
