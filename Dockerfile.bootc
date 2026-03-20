@@ -1,10 +1,35 @@
 # syntax=docker/dockerfile:1
 
+# ── Stage 0: Build bootc from source ──
+# Rust + Debian bookworm gives us a clean build environment with the required
+# C libraries (ostree, glib2, systemd). The resulting binary is copied into
+# the final image so we can invoke bootc directly without a nested container.
+FROM rust:slim-bookworm AS bootc-builder
+ARG BOOTC_VERSION=v1.14.1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        clang \
+        curl \
+        libcap-dev \
+        libglib2.0-dev \
+        libmount-dev \
+        libostree-dev \
+        libssl-dev \
+        libsystemd-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL "https://github.com/bootc-dev/bootc/archive/refs/tags/${BOOTC_VERSION}.tar.gz" \
+        -o /tmp/bootc.tar.gz \
+    && tar -xzf /tmp/bootc.tar.gz -C /tmp \
+    && cd "/tmp/bootc-${BOOTC_VERSION#v}" \
+    && cargo build --release \
+    && install -m 0755 target/release/bootc /usr/local/bin/bootc
+
 # ── Stage 1: Build the Go web server ──
 FROM golang:1.24-alpine AS web-builder
 WORKDIR /src
-COPY web/go.mod .
+COPY web/go.mod web/go.sum ./
 COPY web/*.go .
+RUN go mod download
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /lima-web .
 
 # ── Stage 2: Final image ──
@@ -19,7 +44,7 @@ USER root
 
 RUN set -eux; \
     apt-get update; \
-  apt-get --no-install-recommends -y install ca-certificates curl fuse-overlayfs fuse3 jq openssh-client podman qemu-utils xz-utils; \
+  apt-get --no-install-recommends -y install ca-certificates curl fuse-overlayfs fuse3 jq libcap2 libglib2.0-0 libmount1 libostree-1-1 libssl3 libsystemd0 openssh-client podman qemu-utils xz-utils; \
     case "${TARGETARCH}" in \
       amd64)  LIMA_ARCH="x86_64" ;; \
       arm64)  LIMA_ARCH="aarch64" ;; \
@@ -60,6 +85,7 @@ COPY --chmod=0755 scripts/qemu-tcg-wrapper.sh /usr/local/bin/qemu-tcg-wrapper
 COPY --chmod=0755 scripts/lima-as-user.sh /usr/local/bin/lima-as-user
 COPY --chmod=0644 templates/*.yaml /opt/lima/templates/
 COPY --from=web-builder /lima-web /usr/local/bin/lima-web
+COPY --from=bootc-builder /usr/local/bin/bootc /usr/local/bin/bootc
 COPY web/static/ /usr/share/lima-web/static/
 
 RUN mkdir -p /var/lib/lima-bootc-builds && chown lima:lima /var/lib/lima-bootc-builds

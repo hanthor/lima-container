@@ -49,6 +49,7 @@ func main() {
 	mux.HandleFunc("POST /api/instances/{name}/restart", h.RestartInstance)
 	mux.HandleFunc("DELETE /api/instances/{name}", h.DeleteInstance)
 	mux.HandleFunc("GET /api/instances/{name}/vnc", h.GetVNC)
+	mux.HandleFunc("GET /api/instances/{name}/shell", h.ShellWS)
 	mux.HandleFunc("POST /api/instances/create", h.CreateInstance)
 	mux.HandleFunc("GET /api/templates", h.ListTemplates)
 	mux.HandleFunc("GET /api/info", h.GetInfo)

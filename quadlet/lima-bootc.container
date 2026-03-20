@@ -15,7 +15,8 @@ After=network-online.target
 Image=ghcr.io/YOUR_ORG/lima-bootc:latest
 
 # bootc-image-builder requires full privileges (loop devices, osbuild)
-PodmanArgs=--privileged
+# bootc install requires --pid=host so it can verify it is not overwriting a live system
+PodmanArgs=--privileged --pid=host --cgroupns=host
 
 # fuse-overlayfs inside the container needs /dev/fuse
 AddDevice=/dev/fuse

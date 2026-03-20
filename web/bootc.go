@@ -244,20 +244,33 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		os.Remove(rawPath)
 	}()
 
-	// Run the bootc image itself to install to the loop device.
-	// --pid=host is required by bootc install; /dev is shared so the loop device is visible.
+	// bootc checks /run/udev exists to verify it's not installing over the running OS.
+	// Containers don't run udevd, so create it if absent.
+	os.MkdirAll("/run/udev", 0755)
+
+	// For remote images (no customisation step pulled them), ensure they are in
+	// local containers-storage before invoking bootc.
+	if derivedTag == "" {
+		fmt.Fprintf(logFile, "[lima-bootc] Pulling %s to local storage...\n", buildImage)
+		pullCmd := exec.Command("podman", "pull", buildImage)
+		pullCmd.Stdout = logFile
+		pullCmd.Stderr = logFile
+		if err := pullCmd.Run(); err != nil {
+			b.markFailed(build, fmt.Sprintf("podman pull failed: %v", err))
+			fmt.Fprintf(logFile, "[lima-bootc] podman pull FAILED: %v\n", err)
+			return
+		}
+	}
+
+	// Run bootc natively (binary is baked into this image) so there is no
+	// nested-container restriction. The outer container must be started with
+	// --pid=host so bootc can verify it is not overwriting a live system.
+	// --source-imgref points bootc at the already-pulled local image.
 	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk on %s...\n", loopDev)
-	installCmd := exec.Command("podman", "run",
-		"--rm",
-		"--privileged",
-		"--pid=host",
-		"--network=host",
-		"--security-opt", "label=type:unconfined_t",
-		"-v", "/dev:/dev",
-		buildImage,
-		"bootc", "install", "to-disk",
+	installCmd := exec.Command("bootc", "install", "to-disk",
+		"--source-imgref", "containers-storage:"+buildImage,
 		"--target-no-signature-verification",
-		"--generic-image",
+		"--filesystem", "xfs",
 		loopDev,
 	)
 	installCmd.Stdout = logFile

@@ -1,6 +1,6 @@
 # Bootc image builder
 
-The `lima-bootc` image can build Lima VMs from [bootc](https://containers.github.io/bootc/) container image URIs using [`bootc-image-builder`](https://github.com/osbuild/bootc-image-builder).
+The `lima-bootc` image builds Lima VMs from [bootc](https://containers.github.io/bootc/) container image URIs. The `bootc` binary is compiled from source and baked into the image — no nested containers required.
 
 ## Running
 
@@ -9,6 +9,8 @@ The `lima-bootc` image can build Lima VMs from [bootc](https://containers.github
 docker run -d \
   --name lima-bootc \
   --privileged \
+  --pid=host \
+  --cgroupns=host \
   --device /dev/kvm \
   --device /dev/net/tun \
   --device /dev/fuse \
@@ -22,6 +24,8 @@ docker run -d \
 sudo podman run -d \
   --name lima-bootc \
   --privileged \
+  --pid=host \
+  --cgroupns=host \
   --device /dev/kvm \
   --device /dev/net/tun \
   --device /dev/fuse \
@@ -32,8 +36,10 @@ sudo podman run -d \
   ghcr.io/<your-org>/lima-bootc:latest
 ```
 
-**`--privileged`** is required — `bootc-image-builder` uses loop devices and osbuild internally.  
-**`--device /dev/fuse`** is required — `fuse-overlayfs` is used for nested container storage.
+**`--privileged`** — required for loop devices and KVM.  
+**`--pid=host`** — required by `bootc install` to verify it is not overwriting a live OS.  
+**`--cgroupns=host`** — required for inner podman (customisation builds).  
+**`--device /dev/fuse`** — required for `fuse-overlayfs` nested container storage.
 
 ## Building a VM from the UI
 

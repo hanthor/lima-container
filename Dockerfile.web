@@ -3,8 +3,9 @@
 # ── Stage 1: Build the Go web server ──
 FROM golang:1.24-alpine AS web-builder
 WORKDIR /src
-COPY web/go.mod .
+COPY web/go.mod web/go.sum ./
 COPY web/*.go .
+RUN go mod download
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /lima-web .
 
 # ── Stage 2: Final image ──
