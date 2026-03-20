@@ -19,9 +19,7 @@ var allowedImageExts = map[string]bool{
 	".qcow2": true,
 	".img":   true,
 	".raw":   true,
-	// TODO: Add .iso support. ISO boot requires creating a blank qcow2 disk
-	// and attaching the ISO via additional QEMU arguments, since Lima does not
-	// have native cdrom/ISO boot support.
+	".iso":   true,
 }
 
 var allowedTemplateExts = map[string]bool{

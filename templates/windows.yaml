@@ -1,0 +1,40 @@
+# Windows VM template — boots from an ISO image via LIMA_CDROM env var.
+#
+# Usage:
+#   1. Upload a Windows ISO via the web UI, or
+#   2. LIMA_CDROM=/path/to/windows.iso lima-up templates/windows.yaml
+#
+# Requirements:
+#   - UEFI firmware (OVMF) — handled automatically by qemu-tcg-wrapper
+#   - TPM 2.0 (swtpm) — set LIMA_TPM_DIR for Windows 11
+#   - VirtIO drivers — attach the VirtIO ISO manually if needed
+#
+# After install, RDP is available natively on port 3389.
+
+# Use a placeholder — the real boot disk is created by lima-up for ISOs,
+# or you can point this at a pre-installed qcow2 image.
+images:
+  - location: "/tmp/windows-disk.qcow2"
+    arch: "x86_64"
+
+cpus: 4
+memory: "8GiB"
+disk: "60GiB"
+
+firmware:
+  legacyBIOS: false
+
+mounts: []
+
+video:
+  display: "vnc"
+
+# Forward RDP so the container can proxy to it after Windows is installed.
+portForwards:
+  - guestPort: 3389
+    hostPort: 3389
+    proto: tcp
+
+containerd:
+  system: false
+  user: false

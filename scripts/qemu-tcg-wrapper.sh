@@ -104,5 +104,18 @@ while [ "$i" -lt "$len" ]; do
     i=$((i + 1))
 done
 
+# Inject CD-ROM if LIMA_CDROM is set (used for ISO boot).
+if [ -n "${LIMA_CDROM:-}" ] && [ -f "$LIMA_CDROM" ]; then
+    args+=("-cdrom" "$LIMA_CDROM")
+fi
+
+# Inject TPM if LIMA_TPM_DIR is set (used for Windows 11).
+if [ -n "${LIMA_TPM_DIR:-}" ]; then
+    mkdir -p "$LIMA_TPM_DIR"
+    args+=("-chardev" "socket,id=chrtpm,path=${LIMA_TPM_DIR}/swtpm-sock")
+    args+=("-tpmdev" "emulator,id=tpm0,chardev=chrtpm")
+    args+=("-device" "tpm-tis,tpmdev=tpm0")
+fi
+
 exec qemu-system-x86_64 "${args[@]}"
 
