@@ -271,6 +271,24 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /rdp/{name}:
+    get:
+      operationId: rdpProxy
+      summary: RDCleanPath WebSocket proxy for IronRDP
+      description: |
+        WebSocket endpoint implementing the RDCleanPath protocol for
+        IronRDP WASM. The browser establishes a WebSocket, sends an
+        ASN.1 DER-encoded RDCleanPath request, receives a response
+        with the server certificate, then bidirectional RDP relay begins.
+      tags: [rdp]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "101":
+          description: WebSocket upgrade (RDCleanPath proxy active)
+        "404":
+          description: No RDP registered for instance
+
   /api/templates:
     get:
       operationId: listTemplates

@@ -55,6 +55,22 @@ server {
     proxy_pass http://127.0.0.1:${LIMA_WEB_PORT}/websockify/;
   }
 
+  # RDP static files (IronRDP WASM client)
+  location /rdp/ {
+    alias /usr/share/lima-web/static/rdp/;
+    try_files \$uri @rdp_proxy;
+  }
+
+  # RDCleanPath WebSocket proxy for IronRDP
+  location @rdp_proxy {
+    proxy_http_version 1.1;
+    proxy_read_timeout 3600s;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_pass http://127.0.0.1:${LIMA_WEB_PORT};
+  }
+
   # Root redirect to dashboard
   location = / {
     return 302 /dashboard/;
