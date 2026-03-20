@@ -15,7 +15,7 @@ import (
 
 const (
 	bootcBuildsDir = "/var/lib/lima-bootc-builds"
-	bibImage       = "quay.io/centos-bootc/bootc-image-builder:latest"
+	bootcDiskSize  = "20G"
 )
 
 type BuildStatus string
@@ -27,9 +27,9 @@ const (
 	BuildFailed   BuildStatus = "failed"
 )
 
-// Customizations describes optional image modifications applied before the
-// bootc-image-builder step. A derived container image is built from a generated
-// Containerfile, then passed to bootc-image-builder in place of the source image.
+// Customizations describes optional image modifications applied before building
+// the disk image. A derived container image is built from a generated Containerfile,
+// then used as the source for `bootc install to-disk`.
 type Customizations struct {
 	// EnableSSH ensures sshd is installed and enabled.
 	EnableSSH bool `json:"enable_ssh"`
@@ -219,38 +219,64 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		}()
 	}
 
-	// Run bootc-image-builder via podman.
-	// Share /var/lib/containers/storage so bib uses our existing overlay storage
-	// (avoids overlay-on-overlayfs failures inside the privileged container) and
-	// can access locally-built derived images without a registry push.
-	cmd := exec.Command("podman", "run",
-		"--rm",
-		"--privileged",
-		"--network=host", // bypass netavark (no nft inside the container)
-		"--device", "/dev/fuse",
-		"--pull=newer",
-		"-v", outDir+":/output",
-		"-v", "/var/lib/containers/storage:/var/lib/containers/storage",
-		bibImage,
-		"--type", "qcow2",
-		"--output", "/output",
-		buildImage,
-	)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
+	// --- Phase 2: create a raw disk and install the bootc image to it ---
 
-	fmt.Fprintf(logFile, "[lima-bootc] Starting build: %s → %s\n", buildImage, outDir)
+	rawPath := filepath.Join(outDir, "disk.raw")
+	qcow2Path := filepath.Join(outDir, "disk.qcow2")
 
-	if err := cmd.Run(); err != nil {
-		b.markFailed(build, fmt.Sprintf("bootc-image-builder failed: %v", err))
-		fmt.Fprintf(logFile, "[lima-bootc] Build FAILED: %v\n", err)
+	// Allocate a sparse raw disk image.
+	fmt.Fprintf(logFile, "[lima-bootc] Allocating %s raw disk: %s\n", bootcDiskSize, rawPath)
+	if out, err := exec.Command("truncate", "-s", bootcDiskSize, rawPath).CombinedOutput(); err != nil {
+		b.markFailed(build, fmt.Sprintf("truncate failed: %v: %s", err, out))
 		return
 	}
 
-	// Expected output path from bootc-image-builder
-	qcow2Path := filepath.Join(outDir, "qcow2", "disk.qcow2")
-	if _, err := os.Stat(qcow2Path); err != nil {
-		b.markFailed(build, fmt.Sprintf("qcow2 not found at expected path: %v", err))
+	// Attach a loop device.
+	loopOut, err := exec.Command("losetup", "--find", "--show", rawPath).Output()
+	if err != nil {
+		b.markFailed(build, fmt.Sprintf("losetup failed: %v", err))
+		return
+	}
+	loopDev := strings.TrimSpace(string(loopOut))
+	fmt.Fprintf(logFile, "[lima-bootc] Loop device: %s\n", loopDev)
+	defer func() {
+		exec.Command("losetup", "-d", loopDev).Run()
+		os.Remove(rawPath)
+	}()
+
+	// Run the bootc image itself to install to the loop device.
+	// --pid=host is required by bootc install; /dev is shared so the loop device is visible.
+	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk on %s...\n", loopDev)
+	installCmd := exec.Command("podman", "run",
+		"--rm",
+		"--privileged",
+		"--pid=host",
+		"--network=host",
+		"--security-opt", "label=type:unconfined_t",
+		"-v", "/dev:/dev",
+		buildImage,
+		"bootc", "install", "to-disk",
+		"--target-no-signature-verification",
+		"--generic-image",
+		loopDev,
+	)
+	installCmd.Stdout = logFile
+	installCmd.Stderr = logFile
+	if err := installCmd.Run(); err != nil {
+		b.markFailed(build, fmt.Sprintf("bootc install to-disk failed: %v", err))
+		fmt.Fprintf(logFile, "[lima-bootc] bootc install FAILED: %v\n", err)
+		return
+	}
+
+	// Detach loop device before conversion (deferred losetup -d will be a no-op after this).
+	exec.Command("losetup", "-d", loopDev).Run()
+
+	// Convert raw → qcow2.
+	fmt.Fprintf(logFile, "[lima-bootc] Converting raw → qcow2: %s\n", qcow2Path)
+	if out, err := exec.Command("qemu-img", "convert",
+		"-f", "raw", "-O", "qcow2", rawPath, qcow2Path,
+	).CombinedOutput(); err != nil {
+		b.markFailed(build, fmt.Sprintf("qemu-img convert failed: %v: %s", err, out))
 		return
 	}
 
