@@ -16,10 +16,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const (
-	nginxConfPath = "/etc/nginx/lima-vnc-locations.conf"
-)
-
 var vncUpgrader = websocket.Upgrader{
 	CheckOrigin:  func(r *http.Request) bool { return true },
 	Subprotocols: []string{"binary"},

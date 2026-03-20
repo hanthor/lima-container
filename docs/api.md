@@ -222,7 +222,7 @@ Returns VNC connection details for a running instance.
 
 `url` is ready to open in a browser tab — it loads noVNC connected to this instance's display.
 
-The underlying WebSocket endpoint is `ws://<host>:8006/websockify/{name}`, proxied by nginx to a per-instance `websocketd` bridge on ports 5710–5799.
+The underlying WebSocket endpoint is `ws://<host>:8006/websockify/{name}`, handled by the Go server's built-in WebSocket→TCP proxy (gorilla/websocket) which connects directly to each instance's QEMU VNC port.
 
 **Errors:** `404` if no VNC bridge is running (VM may be stopped or VNC not yet ready).
 
@@ -459,9 +459,9 @@ These are handled by nginx in front of the Go server:
 | `GET /dashboard/*` | Go server :8080 | Dashboard SPA and static assets |
 | `GET /api/*` | Go server :8080 | REST API (proxy timeout: 600 s) |
 | `GET /vnc/*` | Static files | noVNC HTML/JS client |
-| `WS /websockify/{name}` | websocketd :571x | Per-instance VNC WebSocket bridge |
+| `WS /websockify/{name}` | Go server :8080 | Per-instance VNC WebSocket→TCP proxy |
 
-VNC routes are written to `/etc/nginx/lima-vnc-locations.conf` dynamically when VNC bridges start/stop; nginx is reloaded automatically.
+VNC WebSocket connections are handled by the Go server's built-in proxy, which forwards traffic directly to each instance's QEMU VNC TCP port.
 
 ---
 
