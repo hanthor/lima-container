@@ -226,6 +226,8 @@
     // ── Parse URL Parameters ────────────────────────────────
     const params = new URLSearchParams(window.location.search);
     const instance = params.get('instance') || '';
+    // Auto-connect after WASM loads (see loadWasm below)
+    // Credentials stored here for use after init
     const autoUser = params.get('username') || '';
     const autoPass = params.get('password') || '';
 
@@ -243,11 +245,6 @@
     }
     if (autoPass) {
       passInput.value = autoPass;
-    }
-
-    // Auto-connect if credentials were provided via URL
-    if (autoUser && autoPass) {
-      connect(autoUser, autoPass);
     }
 
     // ── PS/2 Set 1 Scancode Map ─────────────────────────────
@@ -418,6 +415,11 @@
         wasmSetup('info');
         ironrdpLoaded = true;
         console.log('IronRDP WASM loaded');
+
+        // Auto-connect if credentials were provided via URL
+        if (autoUser && autoPass) {
+          connect(autoUser, autoPass);
+        }
       } catch (err) {
         console.error('Failed to load IronRDP WASM:', err);
         formError.textContent = 'WASM not available. Run scripts/fetch-ironrdp-wasm.sh first.';
@@ -451,7 +453,7 @@
 
         const desktopSize = new DesktopSize(canvas.width, canvas.height);
 
-        session = new SessionBuilder()
+        session = await new SessionBuilder()
           .proxyAddress(proxyUrl)
           .destination('127.0.0.1:3389')
           .serverDomain('')
@@ -460,7 +462,7 @@
           .authToken('none')
           .desktopSize(desktopSize)
           .renderCanvas(canvas)
-          .build();
+          .connect();
 
         // Save username for convenience
         localStorage.setItem(`rdp-user-${instance}`, username);
