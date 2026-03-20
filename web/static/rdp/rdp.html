@@ -197,7 +197,7 @@
     <div class="form-card">
       <h2>RDP Connection</h2>
       <div class="instance-name" id="form-instance-name"></div>
-      <input id="rdp-user" type="text" placeholder="Username" value="admin" autocomplete="username">
+      <input id="rdp-user" type="text" placeholder="Username" value="lima" autocomplete="username">
       <input id="rdp-pass" type="password" placeholder="Password" autocomplete="current-password">
       <div class="form-error" id="form-error"></div>
       <button id="connect-btn">Connect</button>
@@ -226,15 +226,29 @@
     // ── Parse URL Parameters ────────────────────────────────
     const params = new URLSearchParams(window.location.search);
     const instance = params.get('instance') || '';
+    const autoUser = params.get('username') || '';
+    const autoPass = params.get('password') || '';
 
     if (instance) {
       formInstanceName.textContent = instance;
       document.title = `RDP — ${instance}`;
     }
 
-    // Restore saved credentials for this instance
-    const savedUser = localStorage.getItem(`rdp-user-${instance}`);
-    if (savedUser) userInput.value = savedUser;
+    // Prefill credentials: URL params take priority, then localStorage
+    if (autoUser) {
+      userInput.value = autoUser;
+    } else {
+      const savedUser = localStorage.getItem(`rdp-user-${instance}`);
+      if (savedUser) userInput.value = savedUser;
+    }
+    if (autoPass) {
+      passInput.value = autoPass;
+    }
+
+    // Auto-connect if credentials were provided via URL
+    if (autoUser && autoPass) {
+      connect(autoUser, autoPass);
+    }
 
     // ── PS/2 Set 1 Scancode Map ─────────────────────────────
     const SCANCODE_MAP = {

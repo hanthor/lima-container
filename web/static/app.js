@@ -35,8 +35,11 @@ async function openConsole(name) {
 
 /* ── RDP ─────────────────────────────────────────────────── */
 
-function openRDP(name) {
-  window.open("/rdp/rdp.html?instance=" + encodeURIComponent(name), "rdp-" + name);
+function openRDP(name, username, password) {
+  var url = "/rdp/rdp.html?instance=" + encodeURIComponent(name);
+  if (username) url += "&username=" + encodeURIComponent(username);
+  if (password) url += "&password=" + encodeURIComponent(password);
+  window.open(url, "rdp-" + name);
 }
 
 /* ── Terminal (xterm.js + WebSocket) ──────────────────────── */

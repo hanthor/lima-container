@@ -23,7 +23,7 @@
     <button class="btn btn-secondary"
             onclick="openTerminal('{{.Name}}')">⌨ Terminal</button>
     <button class="btn btn-secondary"
-            onclick="openRDP('{{.Name}}')">🖥️ RDP</button>
+            onclick="openRDP('{{.Name}}', 'lima', 'lima')">🖥️ RDP</button>
     {{else if eq (lower .Status) "stopped"}}
     <button class="btn btn-green"
             hx-post="/api/instances/{{.Name}}/start"
