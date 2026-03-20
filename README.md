@@ -2,7 +2,17 @@
 
 Run Linux VMs with a graphical desktop, accessible in your browser — no host setup required.
 
-Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots automatically when the container starts. Open your browser and connect via the web dashboard or direct noVNC.
+Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). Open your browser and connect via the web dashboard or direct noVNC.
+
+## Image variants
+
+Three images are published from this repo — pick the one that fits your use case:
+
+| Image | Description |
+|-------|-------------|
+| `ghcr.io/<org>/lima:latest` | **Plain** — minimal image, boots a single VM via env var, noVNC only |
+| `ghcr.io/<org>/lima-web:latest` | **Web** — adds the Go web dashboard for multi-VM management (recommended) |
+| `ghcr.io/<org>/lima-bootc:latest` | **Bootc** — web dashboard + ability to build Lima VMs from bootc container image URIs |
 
 ## Quick start
 
@@ -13,7 +23,7 @@ podman run -d \
   --device /dev/net/tun \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
-  ghcr.io/<your-org>/lima:latest
+  ghcr.io/<your-org>/lima-web:latest
 ```
 
 Open [http://localhost:8006](http://localhost:8006) — you'll land on the **web dashboard** where you can manage VMs, create new ones, and open VNC consoles.
@@ -22,12 +32,44 @@ No KVM? Drop `--device /dev/kvm` — the container falls back to software emulat
 
 Prefer Docker instead? Replace `podman` with `docker` in the same commands.
 
+## Bootc image builder
+
+The `lima-bootc` image can build Lima VMs from [bootc](https://containers.github.io/bootc/) container image URIs using [`bootc-image-builder`](https://github.com/osbuild/bootc-image-builder). This lets you point at any bootc-compatible OCI image and get a running VM with no manual image preparation.
+
+**Requirements:** the container must run with `--privileged` (bootc-image-builder uses loop devices and osbuild internally).
+
+```bash
+podman run -d \
+  --name lima-bootc \
+  --privileged \
+  --device /dev/kvm \
+  --device /dev/net/tun \
+  --cap-add NET_ADMIN \
+  -p 8006:8006 \
+  -v lima-bootc-builds:/var/lib/lima-bootc-builds \
+  ghcr.io/<your-org>/lima-bootc:latest
+```
+
+Once running, the dashboard shows a **"Build from bootc image"** button. Enter a bootc container image URI (e.g. `quay.io/fedora/fedora-bootc:42`) and an optional VM name. The build log streams live in the browser; on completion the new VM appears in the instance list.
+
+**REST API for bootc builds:**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/bootc/builds` | Start a build (`{image, name, cpus, memory}`) |
+| `GET` | `/api/bootc/builds` | List all builds with status |
+| `GET` | `/api/bootc/builds/:id` | Get build status |
+| `GET` | `/api/bootc/builds/:id/log` | Stream build log (SSE) |
+| `DELETE` | `/api/bootc/builds/:id` | Cancel / clean up a build |
+
+Built qcow2 images are stored at `/var/lib/lima-bootc-builds/<id>/qcow2/disk.qcow2` inside the container — mount a volume there to persist builds across container restarts.
+
 ## Podman Compose
 
 ```yaml
 services:
   lima:
-    image: ghcr.io/<your-org>/lima:latest
+    image: ghcr.io/<your-org>/lima-web:latest
     container_name: lima
     cap_add:
       - NET_ADMIN
@@ -193,7 +235,7 @@ All endpoints are available at `/api/*`:
 | `GET` | `/api/instances/:name/vnc` | Get VNC connection info (port, password, URL) |
 | `POST` | `/api/instances/create` | Create a new VM from a template |
 | `GET` | `/api/templates` | List available templates |
-| `GET` | `/api/info` | Lima host diagnostics |
+| `GET` | `/api/info` | Lima host diagnostics (`bootc_enabled` field indicates bootc support) |
 
 **Create a VM:**
 ```bash
@@ -237,3 +279,4 @@ Mount it into the container and set `LIMA_TEMPLATE=/custom/myvm.yaml`.
 - `--cap-add NET_ADMIN` is required for Lima's networking stack.
 - `--device /dev/net/tun` is required for Lima's networking — Lima will start but VMs will lose network access without it.
 - Rootful Podman (`sudo podman`) is recommended over rootless. Rootless Podman has issues passing `/dev/net/tun` and requires `--security-opt label=disable` when mounting `~/.lima` due to SELinux.
+- The `lima-bootc` image requires `--privileged` — `bootc-image-builder` uses loop devices and osbuild, which cannot run in an unprivileged container.
