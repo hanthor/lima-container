@@ -226,6 +226,7 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	cmd := exec.Command("podman", "run",
 		"--rm",
 		"--privileged",
+		"--network=host", // bypass netavark (no nft inside the container)
 		"--device", "/dev/fuse",
 		"--pull=newer",
 		"-v", outDir+":/output",
