@@ -69,6 +69,23 @@
           <label for="bootc-name-input" style="margin-top:0.5rem;">VM name (optional)</label>
           <input type="text" id="bootc-name-input" name="vm_name" placeholder="auto-generated"
                  style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-top:0.75rem;">
+            <div>
+              <label for="bootc-disk-size" style="font-size:0.85rem;">Disk size</label>
+              <input type="text" id="bootc-disk-size" name="disk_size" value="20G" placeholder="20G"
+                     style="padding:0.4rem 0.5rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+            </div>
+            <div>
+              <label for="bootc-cpus" style="font-size:0.85rem;">CPUs</label>
+              <input type="number" id="bootc-cpus" name="cpus" value="2" min="1" max="32"
+                     style="padding:0.4rem 0.5rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+            </div>
+            <div>
+              <label for="bootc-memory" style="font-size:0.85rem;">Memory</label>
+              <input type="text" id="bootc-memory" name="memory" value="4GiB" placeholder="4GiB"
+                     style="padding:0.4rem 0.5rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+            </div>
+          </div>
           <details style="margin-top:1rem;">
             <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text-muted);user-select:none;">
               Customizations (optional)
@@ -110,7 +127,7 @@
         <!-- Tab buttons -->
         <div class="modal-tabs">
           <button class="tab active" onclick="switchCreateTab('template')">Template</button>
-          <button class="tab" onclick="switchCreateTab('image')">Disk Image</button>
+          <button class="tab" onclick="switchCreateTab('image')">Upload / URL</button>
         </div>
 
         <!-- Tab: Template (existing) -->
@@ -130,11 +147,11 @@
           <div id="drop-zone" class="drop-zone">
             <div class="drop-zone-text">
               <span style="font-size:2rem;">📦</span>
-              <p>Drag &amp; drop a disk image here</p>
-              <p class="text-muted">.qcow2, .img, .raw</p>
+              <p>Drag &amp; drop a disk image or Lima template</p>
+              <p class="text-muted">.qcow2, .img, .raw, .yaml</p>
               <span class="text-muted">— or —</span>
             </div>
-            <input type="file" id="image-file" accept=".qcow2,.img,.raw,.iso" style="display:none;">
+            <input type="file" id="image-file" accept=".qcow2,.img,.raw,.iso,.yaml,.yml" style="display:none;">
             <button class="btn btn-secondary" onclick="document.getElementById('image-file').click()">Browse files</button>
           </div>
 

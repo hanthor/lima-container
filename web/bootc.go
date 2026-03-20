@@ -15,7 +15,6 @@ import (
 
 const (
 	bootcBuildsDir = "/var/lib/lima-bootc-builds"
-	bootcDiskSize  = "20G"
 )
 
 type BuildStatus string
@@ -53,6 +52,9 @@ type BootcBuild struct {
 	ID             string          `json:"id"`
 	SourceImage    string          `json:"source_image"`
 	VMName         string          `json:"vm_name"`
+	DiskSize       string          `json:"disk_size"`
+	CPUs           int             `json:"cpus"`
+	Memory         string          `json:"memory"`
 	Customizations *Customizations `json:"customizations,omitempty"`
 	Status         BuildStatus     `json:"status"`
 	StartedAt      time.Time       `json:"started_at"`
@@ -81,10 +83,19 @@ func NewBootcManager(lima *LimaCtl, buildsDir string) *BootcManager {
 }
 
 // StartBuild kicks off a bootc-image-builder build in a goroutine.
-func (b *BootcManager) StartBuild(sourceImage, vmName string, customizations *Customizations) (*BootcBuild, error) {
+func (b *BootcManager) StartBuild(sourceImage, vmName string, customizations *Customizations, diskSize string, cpus int, memory string) (*BootcBuild, error) {
 	id := fmt.Sprintf("build-%d", time.Now().UnixMilli())
 	if vmName == "" {
 		vmName = id
+	}
+	if diskSize == "" {
+		diskSize = "20G"
+	}
+	if cpus <= 0 {
+		cpus = 2
+	}
+	if memory == "" {
+		memory = "4GiB"
 	}
 
 	outDir := filepath.Join(b.buildsDir, id)
@@ -98,6 +109,9 @@ func (b *BootcManager) StartBuild(sourceImage, vmName string, customizations *Cu
 		ID:             id,
 		SourceImage:    sourceImage,
 		VMName:         vmName,
+		DiskSize:       diskSize,
+		CPUs:           cpus,
+		Memory:         memory,
 		Customizations: customizations,
 		Status:         BuildPending,
 		StartedAt:      time.Now(),
@@ -230,8 +244,8 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	qcow2Path := filepath.Join(outDir, "disk.qcow2")
 
 	// Allocate a sparse raw disk image.
-	fmt.Fprintf(logFile, "[lima-bootc] Allocating %s raw disk: %s\n", bootcDiskSize, rawPath)
-	if out, err := exec.Command("truncate", "-s", bootcDiskSize, rawPath).CombinedOutput(); err != nil {
+	fmt.Fprintf(logFile, "[lima-bootc] Allocating %s raw disk: %s\n", build.DiskSize, rawPath)
+	if out, err := exec.Command("truncate", "-s", build.DiskSize, rawPath).CombinedOutput(); err != nil {
 		b.markFailed(build, fmt.Sprintf("truncate failed: %v: %s", err, out))
 		return
 	}
@@ -310,7 +324,7 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	// bootc images don't run cloud-init, so Lima's SSH provisioning step will
 	// time out. We use a short timeout and consider the VM started if limactl
 	// reports it as Running even when the provisioning wait times out.
-	if err := b.lima.CreateBootc(qcow2Path, build.VMName); err != nil {
+	if err := b.lima.CreateBootc(qcow2Path, build.VMName, build.CPUs, build.Memory); err != nil {
 		// Check if the VM actually started despite the error (limactl timeout).
 		running, checkErr := b.lima.IsRunning(build.VMName)
 		if checkErr != nil || !running {

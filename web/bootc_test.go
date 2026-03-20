@@ -142,7 +142,7 @@ func newTestManager(t *testing.T) *BootcManager {
 
 func TestBootcManager_StartBuild(t *testing.T) {
 	mgr := newTestManager(t)
-	build, err := mgr.StartBuild("img:latest", "", nil)
+	build, err := mgr.StartBuild("img:latest", "", nil, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestBootcManager_StartBuild(t *testing.T) {
 
 func TestBootcManager_StartBuild_DefaultVMName(t *testing.T) {
 	mgr := newTestManager(t)
-	build, err := mgr.StartBuild("img:latest", "", nil)
+	build, err := mgr.StartBuild("img:latest", "", nil, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestBootcManager_StartBuild_DefaultVMName(t *testing.T) {
 
 func TestBootcManager_StartBuild_CustomVMName(t *testing.T) {
 	mgr := newTestManager(t)
-	build, err := mgr.StartBuild("img:latest", "my-vm", nil)
+	build, err := mgr.StartBuild("img:latest", "my-vm", nil, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild: %v", err)
 	}
@@ -181,13 +181,13 @@ func TestBootcManager_StartBuild_CustomVMName(t *testing.T) {
 
 func TestBootcManager_UniqueIDs(t *testing.T) {
 	mgr := newTestManager(t)
-	b1, err := mgr.StartBuild("img:v1", "", nil)
+	b1, err := mgr.StartBuild("img:v1", "", nil, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild 1: %v", err)
 	}
 	// Ensure unique IDs even when called in rapid succession.
 	time.Sleep(2 * time.Millisecond)
-	b2, err := mgr.StartBuild("img:v2", "", nil)
+	b2, err := mgr.StartBuild("img:v2", "", nil, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild 2: %v", err)
 	}
@@ -202,9 +202,9 @@ func TestBootcManager_ListBuilds(t *testing.T) {
 		t.Fatalf("expected 0 builds, got %d", len(builds))
 	}
 
-	mgr.StartBuild("img:v1", "", nil)
+	mgr.StartBuild("img:v1", "", nil, "", 0, "")
 	time.Sleep(2 * time.Millisecond)
-	mgr.StartBuild("img:v2", "", nil)
+	mgr.StartBuild("img:v2", "", nil, "", 0, "")
 
 	builds := mgr.ListBuilds()
 	if len(builds) != 2 {
@@ -214,7 +214,7 @@ func TestBootcManager_ListBuilds(t *testing.T) {
 
 func TestBootcManager_GetBuild(t *testing.T) {
 	mgr := newTestManager(t)
-	b, _ := mgr.StartBuild("img:latest", "", nil)
+	b, _ := mgr.StartBuild("img:latest", "", nil, "", 0, "")
 
 	got, ok := mgr.GetBuild(b.ID)
 	if !ok {
@@ -236,7 +236,7 @@ func TestBootcManager_GetBuild_NotFound(t *testing.T) {
 func TestBootcManager_StartBuild_WithCustomizations(t *testing.T) {
 	mgr := newTestManager(t)
 	cust := &Customizations{EnableSSH: true, ExtraPackages: []string{"vim"}}
-	build, err := mgr.StartBuild("img:latest", "", cust)
+	build, err := mgr.StartBuild("img:latest", "", cust, "", 0, "")
 	if err != nil {
 		t.Fatalf("StartBuild: %v", err)
 	}
@@ -435,9 +435,9 @@ func TestListBootcBuilds_AfterCreating(t *testing.T) {
 	h := newTestHandler(t, true)
 
 	// Create two builds via the manager directly.
-	h.bootc.StartBuild("img:v1", "", nil)
+	h.bootc.StartBuild("img:v1", "", nil, "", 0, "")
 	time.Sleep(2 * time.Millisecond)
-	h.bootc.StartBuild("img:v2", "", nil)
+	h.bootc.StartBuild("img:v2", "", nil, "", 0, "")
 
 	req := httptest.NewRequest("GET", "/api/bootc/builds", nil)
 	rec := httptest.NewRecorder()
@@ -492,7 +492,7 @@ func TestGetBootcBuild_NotFound(t *testing.T) {
 
 func TestGetBootcBuild_Exists(t *testing.T) {
 	h := newTestHandler(t, true)
-	build, _ := h.bootc.StartBuild("img:latest", "test-vm", nil)
+	build, _ := h.bootc.StartBuild("img:latest", "test-vm", nil, "", 0, "")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/bootc/builds/{id}", h.GetBootcBuild)

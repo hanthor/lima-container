@@ -24,6 +24,21 @@ var allowedImageExts = map[string]bool{
 	// have native cdrom/ISO boot support.
 }
 
+var allowedTemplateExts = map[string]bool{
+	".yaml": true,
+	".yml":  true,
+}
+
+func isAllowedUploadExt(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return allowedImageExts[ext] || allowedTemplateExts[ext]
+}
+
+func isTemplateExt(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return allowedTemplateExts[ext]
+}
+
 // UploadManager handles disk image file storage for VM creation.
 type UploadManager struct {
 	uploadDir string
@@ -52,11 +67,6 @@ func (u *UploadManager) SaveFile(filename string, src io.Reader) (string, error)
 		return "", fmt.Errorf("writing file: %w", err)
 	}
 	return dest, nil
-}
-
-func isAllowedImageExt(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	return allowedImageExts[ext]
 }
 
 // instanceNameFromFile derives a VM instance name from a filename using the
@@ -100,9 +110,9 @@ func (h *Handler) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	if !isAllowedImageExt(header.Filename) {
+	if !isAllowedUploadExt(header.Filename) {
 		writeError(w, http.StatusBadRequest,
-			"unsupported file type: must be .qcow2, .img, or .raw")
+			"unsupported file type: must be .qcow2, .img, .raw, .yaml, or .yml")
 		return
 	}
 
@@ -116,6 +126,18 @@ func (h *Handler) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save file: "+err.Error())
 		return
+	}
+
+	// For YAML templates, copy to Lima templates dir so lima-up can find it.
+	if isTemplateExt(header.Filename) {
+		templateDir := "/usr/local/share/lima/templates"
+		os.MkdirAll(templateDir, 0755)
+		destPath := filepath.Join(templateDir, filepath.Base(header.Filename))
+		if err := copyFile(savedPath, destPath); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to install template: "+err.Error())
+			return
+		}
+		savedPath = destPath
 	}
 
 	if err := h.runLimaUp(savedPath, instanceName); err != nil {
@@ -140,6 +162,21 @@ func (h *Handler) HandleUploadImage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
 // HandleFetchImage handles POST /api/images/fetch — create a VM from a URL.
 // Downloads the disk image asynchronously and returns 202 Accepted immediately.
 // The VM appears in the instance list once download and creation complete.
@@ -160,9 +197,9 @@ func (h *Handler) HandleFetchImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := filepath.Base(parsed.Path)
-	if !isAllowedImageExt(filename) {
+	if !isAllowedUploadExt(filename) {
 		writeError(w, http.StatusBadRequest,
-			"unsupported file type: URL must point to a .qcow2, .img, or .raw file")
+			"unsupported file type: URL must point to a .qcow2, .img, .raw, .yaml, or .yml file")
 		return
 	}
 

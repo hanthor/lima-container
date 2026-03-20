@@ -186,7 +186,10 @@ async function submitBootcForm(form) {
 
   var body = {
     image: image,
-    vm_name: form.querySelector("#bootc-name-input").value.trim() || undefined
+    vm_name: form.querySelector("#bootc-name-input").value.trim() || undefined,
+    disk_size: form.querySelector("#bootc-disk-size").value.trim() || undefined,
+    cpus: parseInt(form.querySelector("#bootc-cpus").value, 10) || undefined,
+    memory: form.querySelector("#bootc-memory").value.trim() || undefined
   };
 
   var ssh = form.querySelector("#bootc-ssh-check").checked;
@@ -261,10 +264,10 @@ function submitCreateVM() {
 }
 
 function uploadImage(file, name) {
-  var validExts = ['.qcow2', '.img', '.raw', '.iso'];
+  var validExts = ['.qcow2', '.img', '.raw', '.iso', '.yaml', '.yml'];
   var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
   if (validExts.indexOf(ext) === -1) {
-    showToast('Unsupported format. Use: ' + validExts.join(', '), 'error');
+    showToast('Unsupported format. Use: qcow2, img, raw, yaml', 'error');
     return;
   }
 
