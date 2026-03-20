@@ -107,6 +107,10 @@ async function deleteInstance(name) {
   refreshInstances();
 }
 
+function openRDP(name) {
+  window.open('/rdp/rdp.html?instance=' + encodeURIComponent(name), 'rdp-' + name);
+}
+
 async function openConsole(name) {
   try {
     var data = await api(
@@ -293,6 +297,11 @@ function renderInstances(instances) {
       actions.appendChild(
         makeBtn("Terminal", "btn btn-secondary", function () {
           openTerminal(inst.name);
+        })
+      );
+      actions.appendChild(
+        makeBtn("🖥️ RDP", "btn btn-secondary", function () {
+          openRDP(inst.name);
         })
       );
     } else if (isStopped) {
