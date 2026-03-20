@@ -7,7 +7,7 @@ Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots autom
 ## Quick start
 
 ```bash
-docker run -d \
+podman run -d \
   --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
@@ -19,7 +19,9 @@ Open [http://localhost:8006](http://localhost:8006). The default Ubuntu VM start
 
 No KVM? Drop `--device /dev/kvm` — the container falls back to software emulation (~10x slower but fully functional).
 
-## Docker Compose
+Prefer Docker instead? Replace `podman` with `docker` in the same commands.
+
+## Podman Compose
 
 ```yaml
 services:
@@ -57,7 +59,7 @@ Disk images and custom YAMLs must be mounted into the container.
 **Example — custom disk image:**
 
 ```bash
-docker run -d \
+podman run -d \
   --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
@@ -70,7 +72,7 @@ docker run -d \
 **Example — k8s template:**
 
 ```bash
-docker run -d \
+podman run -d \
   --name lima \
   --device /dev/kvm \
   --cap-add NET_ADMIN \
@@ -82,7 +84,7 @@ docker run -d \
 To list bundled templates inside the container:
 
 ```bash
-docker exec lima ls /opt/lima/templates/
+podman exec lima ls /opt/lima/templates/
 ```
 
 ## Environment variables
@@ -102,16 +104,16 @@ Disable auto-start with `AUTO_START_LIMA=N`, then manage VMs from the host:
 
 ```bash
 # Start a VM
-docker exec lima lima-up /opt/lima/templates/default.yaml
+podman exec lima lima-up /opt/lima/templates/default.yaml
 
 # List instances
-docker exec lima lima-as-user limactl list
+podman exec lima lima-as-user limactl list
 
 # Stop an instance
-docker exec lima lima-as-user limactl stop default
+podman exec lima lima-as-user limactl stop default
 
 # Delete an instance
-docker exec lima lima-as-user limactl delete default
+podman exec lima lima-as-user limactl delete default
 ```
 
 ### Persistent VM state
@@ -179,5 +181,5 @@ Mount it into the container and set `LIMA_TEMPLATE=/custom/myvm.yaml`.
 
 - Designed for development and experimentation; not a production virtualization platform.
 - Nested virtualization performance depends on host kernel and container runtime.
-- Tested on Linux with Podman and Docker. Rootless mode requires cgroup v2.
+- Tested on Linux with Podman (primary) and Docker. Rootless mode requires cgroup v2.
 - `--cap-add NET_ADMIN` is required for Lima's networking stack.
