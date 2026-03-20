@@ -8,6 +8,9 @@ set -Eeuo pipefail
 : "${LIMA_HOME:=/var/lib/lima}"
 
 mkdir -p /etc/nginx/conf.d /var/log/nginx "${LIMA_HOME}"
+# Ensure the lima user (uid 1000) owns its home directory (important when the
+# directory comes from a host volume mounted as root).
+chown lima:lima "${LIMA_HOME}" 2>/dev/null || true
 
 /usr/local/bin/lima-preflight || true
 

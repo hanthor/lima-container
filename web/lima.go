@@ -139,6 +139,45 @@ func (l *LimaCtl) Create(templatePath, name string) error {
 	return err
 }
 
+// CreateBootc starts a VM built from a bootc image. bootc VMs don't run
+// cloud-init so Lima's SSH provisioning will time out; we use a short timeout
+// and let the caller check IsRunning() to determine actual success.
+func (l *LimaCtl) CreateBootc(qcow2Path, name string) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	args := []string{"start", "--tty=false", "--timeout=3m"}
+	if name != "" {
+		args = append(args, "--name="+name)
+	}
+	args = append(args, qcow2Path)
+
+	_, err := l.run(args...)
+	return err
+}
+
+// IsRunning returns true if the named Lima instance is in Running status.
+func (l *LimaCtl) IsRunning(name string) (bool, error) {
+	out, err := l.run("list", "--json", name)
+	if err != nil {
+		return false, err
+	}
+	var inst Instance
+	if jsonErr := json.Unmarshal(out, &inst); jsonErr != nil {
+		// limactl list may return NDJSON; try line by line.
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if jsonErr2 := json.Unmarshal([]byte(line), &inst); jsonErr2 == nil && inst.Name == name {
+				return inst.Status == "Running", nil
+			}
+		}
+		return false, nil
+	}
+	return inst.Status == "Running", nil
+}
+
 // Info returns limactl info output.
 func (l *LimaCtl) Info() (json.RawMessage, error) {
 	out, err := l.run("info")

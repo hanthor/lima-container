@@ -231,48 +231,74 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		return
 	}
 
-	// Attach a loop device.
-	loopOut, err := exec.Command("losetup", "--find", "--show", rawPath).Output()
+	// Attach the raw image via qemu-nbd, which properly exposes partition devices
+	// (/dev/nbd0p1, /dev/nbd0p2, …) after the partition table is written inside the
+	// nested container. losetup's BLKRRPART ioctl fails in nested container contexts.
+	nbdDev, err := findFreeNBD()
 	if err != nil {
-		b.markFailed(build, fmt.Sprintf("losetup failed: %v", err))
+		b.markFailed(build, fmt.Sprintf("no free nbd device: %v", err))
 		return
 	}
-	loopDev := strings.TrimSpace(string(loopOut))
-	fmt.Fprintf(logFile, "[lima-bootc] Loop device: %s\n", loopDev)
+	if out, err := exec.Command("qemu-nbd", "--connect="+nbdDev, "--format=raw", rawPath).CombinedOutput(); err != nil {
+		b.markFailed(build, fmt.Sprintf("qemu-nbd connect failed: %v: %s", err, out))
+		return
+	}
+	fmt.Fprintf(logFile, "[lima-bootc] NBD device: %s\n", nbdDev)
 	defer func() {
-		exec.Command("losetup", "-d", loopDev).Run()
+		exec.Command("qemu-nbd", "--disconnect", nbdDev).Run()
 		os.Remove(rawPath)
 	}()
+	// Give the kernel a moment to register the block device.
+	time.Sleep(500 * time.Millisecond)
 
 	// bootc checks /run/udev exists to verify it's not installing over the running OS.
 	// Containers don't run udevd, so create it if absent.
 	os.MkdirAll("/run/udev", 0755)
 
-	// For remote images (no customisation step pulled them), ensure they are in
-	// local containers-storage before invoking bootc.
-	if derivedTag == "" {
-		fmt.Fprintf(logFile, "[lima-bootc] Pulling %s to local storage...\n", buildImage)
-		pullCmd := exec.Command("podman", "pull", buildImage)
-		pullCmd.Stdout = logFile
-		pullCmd.Stderr = logFile
-		if err := pullCmd.Run(); err != nil {
-			b.markFailed(build, fmt.Sprintf("podman pull failed: %v", err))
-			fmt.Fprintf(logFile, "[lima-bootc] podman pull FAILED: %v\n", err)
-			return
-		}
+	// Determine --source-imgref for bootc.
+	// Without it, bootc tries to introspect its own container via podman inspect,
+	// which fails in nested podman. We always pass an explicit reference instead.
+	//
+	// Base images:    docker://<registry/image:tag>  — bootc pulls directly
+	// Derived images: oci-archive:/tmp/source.oci   — saved locally and mounted in
+	podmanArgs := []string{
+		"run", "--rm",
+		"--privileged",
+		"--pid=host",
+		"--network=host",
+		"--cgroup-manager=cgroupfs",
+		"--security-opt", "label=type:unconfined_t",
+		"-v", "/dev:/dev",
 	}
 
-	// Run bootc natively (binary is baked into this image) so there is no
-	// nested-container restriction. The outer container must be started with
-	// --pid=host so bootc can verify it is not overwriting a live system.
-	// --source-imgref points bootc at the already-pulled local image.
-	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk on %s...\n", loopDev)
-	installCmd := exec.Command("bootc", "install", "to-disk",
-		"--source-imgref", "containers-storage:"+buildImage,
+	var sourceImgref string
+	if derivedTag != "" {
+		ociPath := filepath.Join(outDir, "source.oci.tar")
+		fmt.Fprintf(logFile, "[lima-bootc] Saving derived image as OCI archive...\n")
+		saveCmd := exec.Command("podman", "save", "--format", "oci-archive", "-o", ociPath, derivedTag)
+		saveCmd.Stdout = logFile
+		saveCmd.Stderr = logFile
+		if err := saveCmd.Run(); err != nil {
+			b.markFailed(build, fmt.Sprintf("podman save failed: %v", err))
+			fmt.Fprintf(logFile, "[lima-bootc] podman save FAILED: %v\n", err)
+			return
+		}
+		podmanArgs = append(podmanArgs, "-v", ociPath+":/tmp/source.oci.tar:ro")
+		sourceImgref = "oci-archive:/tmp/source.oci.tar"
+	} else {
+		sourceImgref = "docker://" + buildImage
+	}
+
+	podmanArgs = append(podmanArgs, buildImage,
+		"bootc", "install", "to-disk",
+		"--source-imgref", sourceImgref,
 		"--target-no-signature-verification",
 		"--filesystem", "xfs",
-		loopDev,
+		nbdDev,
 	)
+
+	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk on %s (source: %s)...\n", nbdDev, sourceImgref)
+	installCmd := exec.Command("podman", podmanArgs...)
 	installCmd.Stdout = logFile
 	installCmd.Stderr = logFile
 	if err := installCmd.Run(); err != nil {
@@ -281,8 +307,8 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		return
 	}
 
-	// Detach loop device before conversion (deferred losetup -d will be a no-op after this).
-	exec.Command("losetup", "-d", loopDev).Run()
+	// Detach NBD device before conversion (deferred qemu-nbd --disconnect will be a no-op).
+	exec.Command("qemu-nbd", "--disconnect", nbdDev).Run()
 
 	// Convert raw → qcow2.
 	fmt.Fprintf(logFile, "[lima-bootc] Converting raw → qcow2: %s\n", qcow2Path)
@@ -296,11 +322,19 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	fmt.Fprintf(logFile, "[lima-bootc] Build complete: %s\n", qcow2Path)
 	fmt.Fprintf(logFile, "[lima-bootc] Starting Lima VM: %s\n", build.VMName)
 
-	// Start Lima VM from the built qcow2
-	if err := b.lima.Create(qcow2Path, build.VMName); err != nil {
-		b.markFailed(build, fmt.Sprintf("lima start failed: %v", err))
-		fmt.Fprintf(logFile, "[lima-bootc] Lima start FAILED: %v\n", err)
-		return
+	// Start Lima VM from the built qcow2.
+	// bootc images don't run cloud-init, so Lima's SSH provisioning step will
+	// time out. We use a short timeout and consider the VM started if limactl
+	// reports it as Running even when the provisioning wait times out.
+	if err := b.lima.CreateBootc(qcow2Path, build.VMName); err != nil {
+		// Check if the VM actually started despite the error (limactl timeout).
+		running, checkErr := b.lima.IsRunning(build.VMName)
+		if checkErr != nil || !running {
+			b.markFailed(build, fmt.Sprintf("lima start failed: %v", err))
+			fmt.Fprintf(logFile, "[lima-bootc] Lima start FAILED: %v\n", err)
+			return
+		}
+		fmt.Fprintf(logFile, "[lima-bootc] Lima provisioning timed out but VM is running (expected for bootc images)\n")
 	}
 
 	fmt.Fprintf(logFile, "[lima-bootc] VM started: %s\n", build.VMName)
@@ -313,6 +347,22 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	b.mu.Unlock()
 
 	log.Printf("bootc build %s complete, VM %s started", build.ID, build.VMName)
+}
+
+// findFreeNBD returns the first /dev/nbdN device that is not currently connected.
+// It checks /sys/block/nbdN/size — the kernel reports 0 for disconnected NBD devices.
+func findFreeNBD() (string, error) {
+	for i := 0; i < 16; i++ {
+		sysPath := fmt.Sprintf("/sys/block/nbd%d/size", i)
+		data, err := os.ReadFile(sysPath)
+		if err != nil {
+			continue // device doesn't exist, skip
+		}
+		if strings.TrimSpace(string(data)) == "0" {
+			return fmt.Sprintf("/dev/nbd%d", i), nil
+		}
+	}
+	return "", fmt.Errorf("all /dev/nbd0..nbd15 devices are in use")
 }
 
 func (b *BootcManager) markFailed(build *BootcBuild, msg string) {
