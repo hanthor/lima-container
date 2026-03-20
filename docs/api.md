@@ -215,7 +215,7 @@ Returns VNC connection details for a running instance.
   "data": {
     "port": 5710,
     "password": "secret",
-    "url": "/vnc/vnc.html?autoconnect=1&resize=remote&path=websockify/my-vm&password=secret"
+    "url": "/vnc/vnc.html?autoconnect=1&resize=remote&path=/websockify/my-vm&password=secret"
   }
 }
 ```

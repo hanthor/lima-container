@@ -145,7 +145,7 @@ func (v *VNCManager) GetVNCInfo(instance string) (map[string]any, error) {
 		return nil, fmt.Errorf("no VNC bridge running for %q", instance)
 	}
 
-	url := fmt.Sprintf("/vnc/vnc.html?autoconnect=1&resize=remote&path=websockify/%s",
+	url := fmt.Sprintf("/vnc/vnc.html?autoconnect=1&resize=remote&path=/websockify/%s",
 		instance)
 	if e.Password != "" {
 		url += "&password=" + e.Password
