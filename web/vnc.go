@@ -3,31 +3,34 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
-	wsPortMin       = 5710
-	wsPortMax       = 5799
-	nginxConfPath   = "/etc/nginx/lima-vnc-locations.conf"
-	websocketdBin   = "websocketd"
-	wsBridgeBin     = "/usr/local/bin/lima-websocket-bridge"
-	vncPortFileDir  = "/run"
+	nginxConfPath = "/etc/nginx/lima-vnc-locations.conf"
 )
 
+var vncUpgrader = websocket.Upgrader{
+	CheckOrigin:  func(r *http.Request) bool { return true },
+	Subprotocols: []string{"binary"},
+}
+
 type vncEntry struct {
-	Cmd      *exec.Cmd
-	WSPort   int
 	VNCPort  int
 	Password string
 }
 
-// VNCManager tracks websocketd processes for each Lima instance.
+// VNCManager tracks QEMU VNC ports for each Lima instance.
 type VNCManager struct {
 	limaHome string
 	mu       sync.Mutex
@@ -41,14 +44,11 @@ func NewVNCManager(limaHome string) *VNCManager {
 	}
 }
 
-// StartVNC starts a websocketd bridge for the given instance.
+// StartVNC registers VNC connection info for an instance.
+// No subprocess is started; connections are proxied on-demand by HandleVNCProxy.
 func (v *VNCManager) StartVNC(instance string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-
-	if e, ok := v.entries[instance]; ok && e.Cmd != nil && e.Cmd.Process != nil {
-		return fmt.Errorf("VNC bridge already running for %q", instance)
-	}
 
 	vncPort, err := v.readVNCPort(instance)
 	if err != nil {
@@ -57,85 +57,29 @@ func (v *VNCManager) StartVNC(instance string) error {
 
 	password := v.readVNCPassword(instance)
 
-	wsPort, err := v.allocatePort()
-	if err != nil {
-		return err
-	}
-
-	// Write per-instance VNC port file so lima-websocket-bridge reads it.
-	portFilePath := fmt.Sprintf("%s/lima-vnc-port-%s", vncPortFileDir, instance)
-	if err := os.WriteFile(portFilePath, []byte(strconv.Itoa(vncPort)), 0644); err != nil {
-		return fmt.Errorf("writing VNC port file: %w", err)
-	}
-
-	cmd := exec.Command(websocketdBin,
-		"--binary",
-		"--address", "127.0.0.1",
-		fmt.Sprintf("--port=%d", wsPort),
-		wsBridgeBin,
-	)
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("LIMA_VNC_PORT_FILE=%s", portFilePath),
-		fmt.Sprintf("LIMA_VNC_PORT=%d", vncPort),
-	)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("starting websocketd: %w", err)
-	}
-
 	v.entries[instance] = &vncEntry{
-		Cmd:      cmd,
-		WSPort:   wsPort,
 		VNCPort:  vncPort,
 		Password: password,
 	}
 
-	// Reap the process asynchronously.
-	go func() {
-		_ = cmd.Wait()
-	}()
-
-	if err := v.writeNginxConfig(); err != nil {
-		log.Printf("warning: failed to write nginx config: %v", err)
-	}
-	reloadNginx()
-
-	log.Printf("VNC bridge started for %q: ws=:%d vnc=:%d", instance, wsPort, vncPort)
+	log.Printf("VNC registered for %q: port=%d", instance, vncPort)
 	return nil
 }
 
-// StopVNC stops the websocketd bridge for the given instance.
+// StopVNC removes the VNC entry for an instance.
 func (v *VNCManager) StopVNC(instance string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	e, ok := v.entries[instance]
-	if !ok {
-		return fmt.Errorf("no VNC bridge running for %q", instance)
+	if _, ok := v.entries[instance]; !ok {
+		return fmt.Errorf("no VNC entry for %q", instance)
 	}
-
-	if e.Cmd != nil && e.Cmd.Process != nil {
-		_ = e.Cmd.Process.Kill()
-	}
-
-	// Remove per-instance port file.
-	portFilePath := fmt.Sprintf("%s/lima-vnc-port-%s", vncPortFileDir, instance)
-	_ = os.Remove(portFilePath)
-
 	delete(v.entries, instance)
-
-	if err := v.writeNginxConfig(); err != nil {
-		log.Printf("warning: failed to write nginx config: %v", err)
-	}
-	reloadNginx()
-
-	log.Printf("VNC bridge stopped for %q", instance)
+	log.Printf("VNC unregistered for %q", instance)
 	return nil
 }
 
-// GetVNCInfo returns connection info for an instance's VNC bridge.
+// GetVNCInfo returns connection info for an instance's VNC.
 func (v *VNCManager) GetVNCInfo(instance string) (map[string]any, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -145,17 +89,86 @@ func (v *VNCManager) GetVNCInfo(instance string) (map[string]any, error) {
 		return nil, fmt.Errorf("no VNC bridge running for %q", instance)
 	}
 
-	url := fmt.Sprintf("/vnc/vnc.html?autoconnect=1&resize=remote&path=/websockify/%s",
-		instance)
+	url := fmt.Sprintf("/vnc/vnc.html?autoconnect=1&resize=remote&path=/websockify/%s", instance)
 	if e.Password != "" {
 		url += "&password=" + e.Password
 	}
 
 	return map[string]any{
-		"port":     e.WSPort,
+		"port":     e.VNCPort,
 		"password": e.Password,
 		"url":      url,
 	}, nil
+}
+
+// HandleVNCProxy upgrades the HTTP connection to WebSocket and proxies raw
+// TCP to the QEMU VNC port for the named instance. noVNC connects here.
+func (v *VNCManager) HandleVNCProxy(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+
+	v.mu.Lock()
+	e, ok := v.entries[name]
+	v.mu.Unlock()
+
+	if !ok {
+		http.Error(w, "no VNC registered for instance "+name, http.StatusNotFound)
+		return
+	}
+
+	ws, err := vncUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("VNC WS upgrade failed for %q: %v", name, err)
+		return
+	}
+	defer ws.Close()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", e.VNCPort)
+	tcp, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		log.Printf("VNC TCP dial failed for %q (%s): %v", name, addr, err)
+		_ = ws.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(1011, "cannot connect to VNC server"))
+		return
+	}
+	defer tcp.Close()
+
+	log.Printf("VNC proxy started for %q (%s)", name, addr)
+
+	done := make(chan struct{}, 2)
+
+	// TCP → WebSocket
+	go func() {
+		buf := make([]byte, 32*1024)
+		for {
+			n, err := tcp.Read(buf)
+			if n > 0 {
+				if werr := ws.WriteMessage(websocket.BinaryMessage, buf[:n]); werr != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}()
+
+	// WebSocket → TCP
+	go func() {
+		for {
+			_, data, err := ws.ReadMessage()
+			if err != nil {
+				break
+			}
+			if _, werr := tcp.Write(data); werr != nil {
+				break
+			}
+		}
+		done <- struct{}{}
+	}()
+
+	<-done
+	log.Printf("VNC proxy ended for %q", name)
 }
 
 // readVNCPort reads the VNC display number from $LIMA_HOME/<instance>/vncdisplay
@@ -188,47 +201,6 @@ func (v *VNCManager) readVNCPassword(instance string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
-}
-
-// allocatePort finds an unused websocketd port in the range [wsPortMin, wsPortMax].
-func (v *VNCManager) allocatePort() (int, error) {
-	used := make(map[int]bool)
-	for _, e := range v.entries {
-		used[e.WSPort] = true
-	}
-	for p := wsPortMin; p <= wsPortMax; p++ {
-		if !used[p] {
-			return p, nil
-		}
-	}
-	return 0, fmt.Errorf("no free websocketd ports in range %d-%d", wsPortMin, wsPortMax)
-}
-
-// writeNginxConfig regenerates the shared nginx config for all active VNC instances.
-// The config is included at the http{} level, so it must define its own server block.
-func (v *VNCManager) writeNginxConfig() error {
-	var b strings.Builder
-	b.WriteString("# Auto-generated by lima-web — do not edit\n")
-
-	if len(v.entries) == 0 {
-		// Write an empty file so nginx doesn't error on missing locations.
-		return os.WriteFile(nginxConfPath, []byte(b.String()), 0644)
-	}
-
-	for instance, e := range v.entries {
-		fmt.Fprintf(&b, `
-# VNC bridge for instance %s
-location /websockify/%s {
-    proxy_http_version 1.1;
-    proxy_read_timeout 61s;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_pass http://127.0.0.1:%d/;
-}
-`, instance, instance, e.WSPort)
-	}
-
-	return os.WriteFile(nginxConfPath, []byte(b.String()), 0644)
 }
 
 // reloadNginx sends a reload signal to nginx.
