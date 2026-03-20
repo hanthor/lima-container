@@ -80,6 +80,7 @@ case "${LIMA_ACCEL_MODE}" in
 esac
 
 # Determine instance name from path (basename without extension) or use as-is.
+instance_name=""
 if [ -f "$target" ]; then
   instance_name="$(basename "$target" .yaml)"
   # If a stopped instance already exists for this template, just restart it.
@@ -90,13 +91,26 @@ if [ -f "$target" ]; then
     lima-as-user env "${qemu_env[@]}" limactl start "$target" "$@"
   fi
 else
+  instance_name="$target"
   lima-as-user env "${qemu_env[@]}" limactl start "$target" "$@"
+fi
+
+# Read the VNC password Lima generated for this instance.
+vnc_password=""
+vnc_password_file="${LIMA_HOME:-/var/lib/lima}/${instance_name}/vncpassword"
+if [ -f "$vnc_password_file" ]; then
+  vnc_password="$(cat "$vnc_password_file")"
 fi
 
 # Attempt to discover the qemu VNC listener created by Lima, then retarget noVNC.
 if port="$(lima-detect-vnc-port)"; then
   lima-use-vnc-port "$port"
-  echo "Open noVNC: http://127.0.0.1:${WEB_PORT:-8006}/vnc.html?autoconnect=1&resize=remote&path=websockify"
+  url="http://127.0.0.1:${WEB_PORT:-8006}/vnc.html?autoconnect=1&resize=remote&path=websockify"
+  if [ -n "$vnc_password" ]; then
+    url="${url}&password=${vnc_password}"
+  fi
+  echo "Open noVNC: ${url}"
+  echo "VM login  — username: ${LIMA_USER:-lima}  password: lima"
 else
   echo "Lima started, but VNC port detection failed. Set manually with: lima-use-vnc-port <port>" >&2
 fi

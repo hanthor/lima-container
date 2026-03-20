@@ -36,3 +36,10 @@ provision:
       dnf install -y firefox
       systemctl set-default graphical.target
       systemctl enable gdm
+      systemctl isolate graphical.target
+  - mode: user
+    script: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+      # Set a login password for the desktop session
+      echo "$(whoami):lima" | sudo chpasswd

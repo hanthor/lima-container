@@ -2,7 +2,7 @@
 
 Run Linux VMs with a graphical desktop, accessible in your browser — no host setup required.
 
-Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots automatically when the container starts. Open your browser and connect.
+Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots automatically when the container starts. Open your browser and connect via the web dashboard or direct noVNC.
 
 ## Quick start
 
@@ -10,12 +10,13 @@ Built on [`ghcr.io/qemus/qemu`](https://github.com/qemus/qemu). A VM boots autom
 podman run -d \
   --name lima \
   --device /dev/kvm \
+  --device /dev/net/tun \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
   ghcr.io/<your-org>/lima:latest
 ```
 
-Open [http://localhost:8006](http://localhost:8006). The default Ubuntu VM starts automatically.
+Open [http://localhost:8006](http://localhost:8006) — you'll land on the **web dashboard** where you can manage VMs, create new ones, and open VNC consoles.
 
 No KVM? Drop `--device /dev/kvm` — the container falls back to software emulation (~10x slower but fully functional).
 
@@ -32,6 +33,7 @@ services:
       - NET_ADMIN
     devices:
       - /dev/kvm
+      - /dev/net/tun
     environment:
       LIMA_TEMPLATE: "default"   # template name, path to .yaml, or path to .qcow2/.img/.raw
       LIMA_ACCEL_MODE: "auto"    # auto | kvm | tcg
@@ -51,6 +53,7 @@ Set `LIMA_TEMPLATE` to select what boots:
 |-----------------|-------------|
 | `default` | Ubuntu Noble — lightweight, fast boot (default) |
 | `k8s` | Ubuntu Noble with k3s pre-installed |
+| `centos-stream-10-gnome` | CentOS Stream 10 with GNOME desktop + Firefox |
 | `/images/myvm.qcow2` | Boot your own disk image (qcow2, img, or raw) |
 | `/custom/myvm.yaml` | Use a custom Lima YAML template |
 
@@ -62,6 +65,7 @@ Disk images and custom YAMLs must be mounted into the container.
 podman run -d \
   --name lima \
   --device /dev/kvm \
+  --device /dev/net/tun \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
   -e LIMA_TEMPLATE=/images/myvm.qcow2 \
@@ -75,6 +79,7 @@ podman run -d \
 podman run -d \
   --name lima \
   --device /dev/kvm \
+  --device /dev/net/tun \
   --cap-add NET_ADMIN \
   -p 8006:8006 \
   -e LIMA_TEMPLATE=k8s \
@@ -125,6 +130,18 @@ volumes:
   - ./lima-state:/var/lib/lima
 ```
 
+If Lima is already installed on the host, you can mount `~/.lima` directly to share instances with the host:
+
+```bash
+# Docker
+docker run -d ... -v ~/.lima:/var/lib/lima ghcr.io/<your-org>/lima:latest
+
+# Rootful Podman (recommended — avoids SELinux and device permission issues)
+sudo podman run -d ... --security-opt label=disable -v ~/.lima:/var/lib/lima ghcr.io/<your-org>/lima:latest
+```
+
+The container's `lima` user runs as UID 1000. Ensure the mounted directory is owned by UID 1000 to avoid permission errors.
+
 ### Shared workspace
 
 Mount a host directory to `/workspace` — it is shared into the VM automatically:
@@ -151,10 +168,45 @@ ports:
 ### Architecture
 
 ```
-Browser → noVNC (port 8006) → nginx → websocketd → nc → Lima QEMU VNC (port 5900)
+Browser
+  ├── /              → redirect to /dashboard/
+  ├── /dashboard/    → nginx → lima-web Go server (VM management UI)
+  ├── /api/*         → nginx → lima-web Go server (REST API)
+  └── /vnc/vnc.html  → nginx → noVNC client
+       └── /websockify/<instance> → nginx → websocketd → nc → QEMU VNC
 ```
 
-Data flows from your browser through noVNC over HTTP, proxied through nginx as a websocket, then bridged via `nc` into the Lima VM's QEMU VNC socket.
+The Go server (`lima-web`) wraps `limactl` as a REST API and manages per-instance websocketd processes for VNC bridging. nginx is the front door — proxying API calls, serving noVNC static files, and routing websocket connections.
+
+### REST API
+
+All endpoints are available at `/api/*`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/instances` | List all VMs |
+| `GET` | `/api/instances/:name` | Get VM details |
+| `POST` | `/api/instances/:name/start` | Start a stopped VM |
+| `POST` | `/api/instances/:name/stop` | Stop a running VM |
+| `POST` | `/api/instances/:name/restart` | Restart a VM |
+| `DELETE` | `/api/instances/:name` | Delete a VM |
+| `GET` | `/api/instances/:name/vnc` | Get VNC connection info (port, password, URL) |
+| `POST` | `/api/instances/create` | Create a new VM from a template |
+| `GET` | `/api/templates` | List available templates |
+| `GET` | `/api/info` | Lima host diagnostics |
+
+**Create a VM:**
+```bash
+curl -X POST http://localhost:8006/api/instances/create \
+  -H 'Content-Type: application/json' \
+  -d '{"template": "default"}'
+```
+
+**Get VNC console URL:**
+```bash
+curl http://localhost:8006/api/instances/default/vnc
+# → {"data": {"port": 5710, "password": "...", "url": "/vnc/vnc.html?autoconnect=1&..."}}
+```
 
 ### Custom Lima templates
 
@@ -183,3 +235,5 @@ Mount it into the container and set `LIMA_TEMPLATE=/custom/myvm.yaml`.
 - Nested virtualization performance depends on host kernel and container runtime.
 - Tested on Linux with Podman (primary) and Docker. Rootless mode requires cgroup v2.
 - `--cap-add NET_ADMIN` is required for Lima's networking stack.
+- `--device /dev/net/tun` is required for Lima's networking — Lima will start but VMs will lose network access without it.
+- Rootful Podman (`sudo podman`) is recommended over rootless. Rootless Podman has issues passing `/dev/net/tun` and requires `--security-opt label=disable` when mounting `~/.lima` due to SELinux.
