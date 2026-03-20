@@ -52,17 +52,76 @@ podman run -d \
 
 Once running, the dashboard shows a **"Build from bootc image"** button. Enter a bootc container image URI (e.g. `quay.io/fedora/fedora-bootc:42`) and an optional VM name. The build log streams live in the browser; on completion the new VM appears in the instance list.
 
+### Customizing before build
+
+Expand **"Customizations (optional)"** in the build modal to:
+- **Enable SSH** — ensures `sshd` is installed and enabled in the VM
+- **Enable RDP** — installs and enables `xrdp` for Remote Desktop access
+- **Extra packages** — space-separated list of additional packages to install
+- **Custom Containerfile instructions** — arbitrary `RUN`/`COPY`/etc. appended to the generated Containerfile
+
+When any customization is selected, the backend:
+1. Generates a derived `Containerfile` (`FROM <your-image>` + customization layers)
+2. Builds it locally with `podman build` into a temporary image
+3. Passes the derived image to `bootc-image-builder` instead of the original
+4. Cleans up the temporary image after the build
+
 **REST API for bootc builds:**
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/bootc/builds` | Start a build (`{image, name, cpus, memory}`) |
+| `POST` | `/api/bootc/builds` | Start a build (`{image, vm_name, customizations}`) |
 | `GET` | `/api/bootc/builds` | List all builds with status |
 | `GET` | `/api/bootc/builds/:id` | Get build status |
 | `GET` | `/api/bootc/builds/:id/log` | Stream build log (SSE) |
 | `DELETE` | `/api/bootc/builds/:id` | Cancel / clean up a build |
 
+**`customizations` object (all fields optional):**
+```json
+{
+  "enable_ssh": true,
+  "enable_rdp": false,
+  "extra_packages": ["vim", "curl"],
+  "extra_containerfile": "RUN echo 'welcome' > /etc/motd"
+}
+```
+
 Built qcow2 images are stored at `/var/lib/lima-bootc-builds/<id>/qcow2/disk.qcow2` inside the container — mount a volume there to persist builds across container restarts.
+
+## Quadlet (systemd)
+
+All three images ship ready-to-use [Podman Quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html) unit files in the `quadlet/` directory. Copy (or symlink) the relevant file to enable the container as a systemd service.
+
+**User service** (runs as your login user, no root required):
+
+```bash
+# lima-web (recommended)
+cp quadlet/lima-web.container ~/.config/containers/systemd/
+# Edit the file to set YOUR_ORG, then:
+systemctl --user daemon-reload
+systemctl --user start lima-web
+systemctl --user enable lima-web   # start on login
+```
+
+**System service** (runs at boot, managed by root):
+
+```bash
+sudo cp quadlet/lima-bootc.container /etc/containers/systemd/
+# Edit the file to set YOUR_ORG, then:
+sudo systemctl daemon-reload
+sudo systemctl start lima-bootc
+sudo systemctl enable lima-bootc
+```
+
+**Managing the service:**
+
+```bash
+systemctl --user status lima-web
+systemctl --user stop lima-web
+journalctl --user -u lima-web -f   # follow logs
+```
+
+> **Note:** `lima-bootc.container` uses `PodmanArgs=--privileged` because `bootc-image-builder` requires loop devices and osbuild. The other two images do not need elevated privileges beyond `NET_ADMIN` + `/dev/kvm`.
 
 ## Podman Compose
 
