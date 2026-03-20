@@ -220,6 +220,130 @@ async function submitBootcForm(form) {
   return false;
 }
 
+/* ── Create VM Tabs + Upload ──────────────────────────────── */
+
+function switchCreateTab(tab) {
+  document.querySelectorAll('.modal-tabs .tab').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  document.getElementById('tab-template').style.display = tab === 'template' ? '' : 'none';
+  document.getElementById('tab-image').style.display = tab === 'image' ? '' : 'none';
+}
+
+function submitCreateVM() {
+  var templateTab = document.getElementById('tab-template');
+  var name = document.getElementById('create-vm-name').value.trim();
+
+  if (templateTab.style.display !== 'none') {
+    var template = document.getElementById('template-select').value;
+    if (!template) { showToast('Select a template', 'error'); return; }
+    fetch('/api/instances/create', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({template: template, name: name || undefined})
+    }).then(function(r) { return r.json(); }).then(function(json) {
+      if (json.error) { showToast(json.error, 'error'); return; }
+      showToast('Created ' + (json.data.instance || 'VM'), 'success');
+      document.getElementById('modal-overlay').classList.add('hidden');
+    }).catch(function(e) { showToast('Create failed: ' + e.message, 'error'); });
+    return;
+  }
+
+  var fileInput = document.getElementById('image-file');
+  var urlInput = document.getElementById('image-url').value.trim();
+
+  if (fileInput.files.length > 0) {
+    uploadImage(fileInput.files[0], name);
+  } else if (urlInput) {
+    fetchImage(urlInput, name);
+  } else {
+    showToast('Select a file or enter a URL', 'error');
+  }
+}
+
+function uploadImage(file, name) {
+  var validExts = ['.qcow2', '.img', '.raw', '.iso'];
+  var ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+  if (validExts.indexOf(ext) === -1) {
+    showToast('Unsupported format. Use: ' + validExts.join(', '), 'error');
+    return;
+  }
+
+  var form = new FormData();
+  form.append('file', file);
+  if (name) form.append('name', name);
+
+  var progress = document.getElementById('upload-progress');
+  var fill = document.getElementById('progress-fill');
+  var text = document.getElementById('progress-text');
+  progress.classList.remove('hidden');
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/images/upload');
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round(e.loaded / e.total * 100);
+      fill.style.width = pct + '%';
+      text.textContent = 'Uploading… ' + pct + '%';
+    }
+  };
+  xhr.onload = function() {
+    progress.classList.add('hidden');
+    fill.style.width = '0%';
+    try {
+      var json = JSON.parse(xhr.responseText);
+      if (xhr.status >= 400 || json.error) {
+        showToast(json.error || 'Upload failed', 'error');
+        return;
+      }
+      showToast('VM created from ' + file.name, 'success');
+      document.getElementById('modal-overlay').classList.add('hidden');
+    } catch(e) {
+      showToast('Upload failed', 'error');
+    }
+  };
+  xhr.onerror = function() {
+    progress.classList.add('hidden');
+    showToast('Upload failed: network error', 'error');
+  };
+  xhr.send(form);
+}
+
+function fetchImage(url, name) {
+  showToast('Downloading image…', 'info');
+  document.getElementById('modal-overlay').classList.add('hidden');
+  fetch('/api/images/fetch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: url, name: name || undefined})
+  }).then(function(r) { return r.json(); }).then(function(json) {
+    if (json.error) { showToast(json.error, 'error'); return; }
+    showToast('Download started — VM will appear when ready', 'success');
+  }).catch(function(e) { showToast('Fetch failed: ' + e.message, 'error'); });
+}
+
+(function() {
+  var dz = document.getElementById('drop-zone');
+  if (!dz) return;
+  var fi = document.getElementById('image-file');
+
+  dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', function() { dz.classList.remove('drag-over'); });
+  dz.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      fi.files = e.dataTransfer.files;
+      dz.querySelector('.drop-zone-text p').textContent = e.dataTransfer.files[0].name;
+    }
+  });
+
+  fi.addEventListener('change', function() {
+    if (fi.files.length > 0) {
+      dz.querySelector('.drop-zone-text p').textContent = fi.files[0].name;
+    }
+  });
+})();
+
 /* ── Keyboard Shortcuts ──────────────────────────────────── */
 
 document.addEventListener("keydown", function (e) {

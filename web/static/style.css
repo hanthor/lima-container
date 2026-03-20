@@ -456,6 +456,21 @@ input[type="text"]:focus {
   height: 100%;
 }
 
+/* ── Tabs ────────────────────────────────────────────────── */
+.modal-tabs { display: flex; gap: 0; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.modal-tabs .tab { padding: 0.5rem 1rem; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent; }
+.modal-tabs .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Drop Zone ───────────────────────────────────────────── */
+.drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; transition: border-color 0.2s, background-color 0.2s; cursor: pointer; }
+.drop-zone.drag-over { border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+.drop-zone-text p { margin: 0.25rem 0; }
+
+/* ── Upload Progress ─────────────────────────────────────── */
+.upload-progress { margin-top: 1rem; }
+.progress-bar { height: 6px; background: var(--card-bg); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 480px) {
   header {

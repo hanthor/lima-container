@@ -107,21 +107,61 @@
         <button class="btn-icon" onclick="document.getElementById('modal-overlay').classList.add('hidden')">&times;</button>
       </div>
       <div class="modal-body">
-        <label for="template-select">Template</label>
-        <select id="template-select"
-                hx-get="/dashboard/partials/template-options"
-                hx-trigger="load"
-                hx-swap="innerHTML">
-          <option value="">Loading templates…</option>
-        </select>
+        <!-- Tab buttons -->
+        <div class="modal-tabs">
+          <button class="tab active" onclick="switchCreateTab('template')">Template</button>
+          <button class="tab" onclick="switchCreateTab('image')">Disk Image</button>
+        </div>
+
+        <!-- Tab: Template (existing) -->
+        <div id="tab-template" class="tab-content active">
+          <label for="template-select">Template</label>
+          <select id="template-select"
+                  hx-get="/dashboard/partials/template-options"
+                  hx-trigger="load"
+                  hx-swap="innerHTML">
+            <option value="">Loading templates…</option>
+          </select>
+        </div>
+
+        <!-- Tab: Disk Image (new) -->
+        <div id="tab-image" class="tab-content" style="display:none;">
+          <!-- Drag and drop zone -->
+          <div id="drop-zone" class="drop-zone">
+            <div class="drop-zone-text">
+              <span style="font-size:2rem;">📦</span>
+              <p>Drag &amp; drop a disk image here</p>
+              <p class="text-muted">.qcow2, .img, .raw</p>
+              <span class="text-muted">— or —</span>
+            </div>
+            <input type="file" id="image-file" accept=".qcow2,.img,.raw,.iso" style="display:none;">
+            <button class="btn btn-secondary" onclick="document.getElementById('image-file').click()">Browse files</button>
+          </div>
+
+          <div style="margin-top:1rem;text-align:center;color:var(--text-muted);">— or enter a URL —</div>
+
+          <label for="image-url" style="margin-top:0.5rem;">Image URL</label>
+          <input type="text" id="image-url" placeholder="https://example.com/fedora-40.qcow2"
+                 style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+
+          <!-- Upload progress (hidden by default) -->
+          <div id="upload-progress" class="upload-progress hidden">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <span id="progress-text">Uploading…</span>
+          </div>
+        </div>
+
+        <!-- Shared: VM name input -->
+        <div style="margin-top:1rem;">
+          <label for="create-vm-name">VM Name (optional)</label>
+          <input type="text" id="create-vm-name" placeholder="auto-generated"
+                 style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary"
                 onclick="document.getElementById('modal-overlay').classList.add('hidden')">Cancel</button>
-        <button class="btn btn-primary"
-                hx-post="/api/instances/create"
-                hx-vals="js:{template: document.getElementById('template-select').value}"
-                hx-swap="none">Create</button>
+        <button class="btn btn-primary" onclick="submitCreateVM()">Create</button>
       </div>
       <div id="create-status" class="create-status hidden">
         <div class="spinner"></div>
