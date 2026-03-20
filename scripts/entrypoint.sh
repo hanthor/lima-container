@@ -8,9 +8,22 @@ set -Eeuo pipefail
 : "${LIMA_HOME:=/var/lib/lima}"
 : "${TLS_CERT:=}"
 : "${TLS_KEY:=}"
+: "${TLS:=on}"
 
-# Build nginx listen directive and optional SSL directives
-if [ -n "${TLS_CERT}" ] && [ -n "${TLS_KEY}" ]; then
+# TLS is on by default. Auto-generate a self-signed cert if none provided.
+# Set TLS=off to disable.
+if [[ "${TLS}" =~ ^(off|0|false|no)$ ]]; then
+  LISTEN_DIRECTIVE="listen ${WEB_PORT} default_server"
+  SSL_DIRECTIVES=""
+else
+  if [ -z "${TLS_CERT}" ] || [ -z "${TLS_KEY}" ]; then
+    TLS_CERT="/etc/nginx/self-signed.crt"
+    TLS_KEY="/etc/nginx/self-signed.key"
+    echo "Generating self-signed TLS certificate…" >&2
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+      -nodes -days 3650 -subj "/CN=lima-container" \
+      -keyout "${TLS_KEY}" -out "${TLS_CERT}" 2>/dev/null
+  fi
   LISTEN_DIRECTIVE="listen ${WEB_PORT} ssl default_server"
   SSL_DIRECTIVES="
   ssl_certificate ${TLS_CERT};
@@ -18,9 +31,6 @@ if [ -n "${TLS_CERT}" ] && [ -n "${TLS_KEY}" ]; then
   ssl_protocols TLSv1.2 TLSv1.3;
   ssl_ciphers HIGH:!aNULL:!MD5;
   ssl_prefer_server_ciphers on;"
-else
-  LISTEN_DIRECTIVE="listen ${WEB_PORT} default_server"
-  SSL_DIRECTIVES=""
 fi
 
 mkdir -p /etc/nginx/conf.d /var/log/nginx "${LIMA_HOME}"

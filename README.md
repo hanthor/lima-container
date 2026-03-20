@@ -73,7 +73,9 @@ services:
 
 ## TLS / HTTPS
 
-By default nginx serves plain HTTP. To enable HTTPS (required for noVNC "secure context" on non-localhost), set `TLS_CERT` and `TLS_KEY` to PEM file paths inside the container:
+**TLS is enabled by default.** On first start, a self-signed certificate is auto-generated so noVNC, xterm.js, and RDP all work over a secure context without extra configuration. Your browser will show a certificate warning — accept it to proceed.
+
+To use your own certificate, mount it and set `TLS_CERT`/`TLS_KEY`:
 
 ```bash
 docker run -d \
@@ -88,15 +90,13 @@ docker run -d \
   ghcr.io/<your-org>/lima-web:latest
 ```
 
-**Self-signed certificate** (for testing):
+To **disable TLS** (plain HTTP), set `TLS=off`:
 
 ```bash
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-  -days 365 -nodes -subj "/CN=lima" \
-  -keyout certs/key.pem -out certs/cert.pem
+docker run -d -e TLS=off ...
 ```
 
-**Let's Encrypt / reverse proxy**: If you already have a TLS-terminating reverse proxy (Caddy, Traefik, nginx), leave `TLS_CERT`/`TLS_KEY` unset and let the proxy handle HTTPS.
+**Let's Encrypt / reverse proxy**: If you already have a TLS-terminating reverse proxy (Caddy, Traefik, nginx), set `TLS=off` and let the proxy handle HTTPS.
 
 **Tailscale** (zero-config alternative): Run the container on a Tailscale node and access it via [Tailscale HTTPS](https://tailscale.com/kb/1153/enabling-https) or MagicDNS — no certificate management needed.
 

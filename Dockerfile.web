@@ -32,7 +32,7 @@ USER root
 
 RUN set -eux; \
     apt-get update; \
-  apt-get --no-install-recommends -y install ca-certificates curl jq openssh-client xz-utils; \
+  apt-get --no-install-recommends -y install ca-certificates curl jq openssl openssh-client xz-utils; \
     case "${TARGETARCH}" in \
       amd64)  LIMA_ARCH="x86_64" ;; \
       arm64)  LIMA_ARCH="aarch64" ;; \
