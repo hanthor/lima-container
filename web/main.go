@@ -19,7 +19,14 @@ func main() {
 
 	lima := NewLimaCtl(limaHome)
 	vnc := NewVNCManager(limaHome)
-	h := NewHandler(lima, vnc)
+
+	enabled := os.Getenv("LIMA_BOOTC_ENABLED") == "true"
+	var bootcMgr *BootcManager
+	if enabled {
+		bootcMgr = NewBootcManager(lima)
+		log.Println("bootc-image-builder support enabled")
+	}
+	h := NewHandler(lima, vnc, bootcMgr)
 
 	// Scan for already-running instances and start their VNC bridges.
 	if instances, err := lima.List(); err == nil {
@@ -45,6 +52,10 @@ func main() {
 	mux.HandleFunc("POST /api/instances/create", h.CreateInstance)
 	mux.HandleFunc("GET /api/templates", h.ListTemplates)
 	mux.HandleFunc("GET /api/info", h.GetInfo)
+	mux.HandleFunc("GET /api/bootc/builds", h.ListBootcBuilds)
+	mux.HandleFunc("POST /api/bootc/builds", h.CreateBootcBuild)
+	mux.HandleFunc("GET /api/bootc/builds/{id}", h.GetBootcBuild)
+	mux.HandleFunc("GET /api/bootc/builds/{id}/log", h.StreamBootcBuildLog)
 
 	// Serve static dashboard files.
 	staticDir := "/usr/share/lima-web/static/"

@@ -12,12 +12,13 @@ import (
 
 // Handler holds dependencies for HTTP handlers.
 type Handler struct {
-	lima *LimaCtl
-	vnc  *VNCManager
+	lima  *LimaCtl
+	vnc   *VNCManager
+	bootc *BootcManager
 }
 
-func NewHandler(lima *LimaCtl, vnc *VNCManager) *Handler {
-	return &Handler{lima: lima, vnc: vnc}
+func NewHandler(lima *LimaCtl, vnc *VNCManager, bootc *BootcManager) *Handler {
+	return &Handler{lima: lima, vnc: vnc, bootc: bootc}
 }
 
 // --- response helpers ---
@@ -234,5 +235,60 @@ func (h *Handler) GetInfo(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeData(w, info)
+	writeData(w, map[string]any{
+		"lima":          info,
+		"bootc_enabled": h.bootc != nil,
+	})
+}
+
+func (h *Handler) ListBootcBuilds(w http.ResponseWriter, r *http.Request) {
+	if h.bootc == nil {
+		writeError(w, http.StatusNotFound, "bootc not available in this image")
+		return
+	}
+	writeData(w, h.bootc.ListBuilds())
+}
+
+func (h *Handler) CreateBootcBuild(w http.ResponseWriter, r *http.Request) {
+	if h.bootc == nil {
+		writeError(w, http.StatusNotFound, "bootc not available in this image")
+		return
+	}
+	var req struct {
+		Image  string `json:"image"`
+		VMName string `json:"vm_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Image == "" {
+		writeError(w, http.StatusBadRequest, "image is required")
+		return
+	}
+	build, err := h.bootc.StartBuild(req.Image, req.VMName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"data": build})
+}
+
+func (h *Handler) GetBootcBuild(w http.ResponseWriter, r *http.Request) {
+	if h.bootc == nil {
+		writeError(w, http.StatusNotFound, "bootc not available in this image")
+		return
+	}
+	id := r.PathValue("id")
+	build, ok := h.bootc.GetBuild(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "build not found")
+		return
+	}
+	writeData(w, build)
+}
+
+func (h *Handler) StreamBootcBuildLog(w http.ResponseWriter, r *http.Request) {
+	if h.bootc == nil {
+		writeError(w, http.StatusNotFound, "bootc not available")
+		return
+	}
+	id := r.PathValue("id")
+	h.bootc.StreamLog(id, w)
 }
