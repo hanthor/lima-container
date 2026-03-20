@@ -235,37 +235,14 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		b.markFailed(build, fmt.Sprintf("truncate failed: %v: %s", err, out))
 		return
 	}
-
-	// Attach the raw image via qemu-nbd, which properly exposes partition devices
-	// (/dev/nbd0p1, /dev/nbd0p2, …) after the partition table is written inside the
-	// nested container. losetup's BLKRRPART ioctl fails in nested container contexts.
-	nbdDev, err := findFreeNBD()
-	if err != nil {
-		b.markFailed(build, fmt.Sprintf("no free nbd device: %v", err))
-		return
-	}
-	if out, err := exec.Command("qemu-nbd", "--connect="+nbdDev, "--format=raw", rawPath).CombinedOutput(); err != nil {
-		b.markFailed(build, fmt.Sprintf("qemu-nbd connect failed: %v: %s", err, out))
-		return
-	}
-	fmt.Fprintf(logFile, "[lima-bootc] NBD device: %s\n", nbdDev)
-	defer func() {
-		exec.Command("qemu-nbd", "--disconnect", nbdDev).Run()
-		os.Remove(rawPath)
-	}()
-	// Give the kernel a moment to register the block device.
-	time.Sleep(500 * time.Millisecond)
+	defer os.Remove(rawPath)
 
 	// bootc checks /run/udev exists to verify it's not installing over the running OS.
-	// Containers don't run udevd, so create it if absent.
 	os.MkdirAll("/run/udev", 0755)
 
-	// Determine --source-imgref for bootc.
-	// Without it, bootc tries to introspect its own container via podman inspect,
-	// which fails in nested podman. We always pass an explicit reference instead.
-	//
-	// Base images:    docker://<registry/image:tag>  — bootc pulls directly
-	// Derived images: oci-archive:/tmp/source.oci   — saved locally and mounted in
+	// The nested container is --privileged with --pid=host, so losetup works inside
+	// it even when the outer container is rootless. We mount the raw disk file in
+	// and use a shell wrapper to: losetup → bootc install → losetup cleanup.
 	podmanArgs := []string{
 		"run", "--rm",
 		"--privileged",
@@ -274,6 +251,7 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		"--cgroup-manager=cgroupfs",
 		"--security-opt", "label=type:unconfined_t",
 		"-v", "/dev:/dev",
+		"-v", rawPath + ":/tmp/disk.raw",
 	}
 
 	var sourceImgref string
@@ -294,15 +272,19 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		sourceImgref = "docker://" + buildImage
 	}
 
-	podmanArgs = append(podmanArgs, buildImage,
-		"bootc", "install", "to-disk",
-		"--source-imgref", sourceImgref,
-		"--target-no-signature-verification",
-		"--filesystem", "xfs",
-		nbdDev,
+	// Shell wrapper: attach raw file as loop device, run bootc, detach.
+	// losetup works inside the privileged nested container even under rootless Podman.
+	bootcScript := fmt.Sprintf(
+		`set -e; DEV=$(losetup --find --show /tmp/disk.raw); `+
+			`echo "Loop device: $DEV"; `+
+			`trap "losetup -d $DEV" EXIT; `+
+			`bootc install to-disk --source-imgref %s --target-no-signature-verification --filesystem xfs "$DEV"`,
+		sourceImgref,
 	)
 
-	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk on %s (source: %s)...\n", nbdDev, sourceImgref)
+	podmanArgs = append(podmanArgs, buildImage, "bash", "-c", bootcScript)
+
+	fmt.Fprintf(logFile, "[lima-bootc] Running bootc install to-disk (source: %s)...\n", sourceImgref)
 	installCmd := exec.Command("podman", podmanArgs...)
 	installCmd.Stdout = logFile
 	installCmd.Stderr = logFile
@@ -311,9 +293,6 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 		fmt.Fprintf(logFile, "[lima-bootc] bootc install FAILED: %v\n", err)
 		return
 	}
-
-	// Detach NBD device before conversion (deferred qemu-nbd --disconnect will be a no-op).
-	exec.Command("qemu-nbd", "--disconnect", nbdDev).Run()
 
 	// Convert raw → qcow2.
 	fmt.Fprintf(logFile, "[lima-bootc] Converting raw → qcow2: %s\n", qcow2Path)
@@ -352,22 +331,6 @@ func (b *BootcManager) runBuild(build *BootcBuild, outDir string) {
 	b.mu.Unlock()
 
 	log.Printf("bootc build %s complete, VM %s started", build.ID, build.VMName)
-}
-
-// findFreeNBD returns the first /dev/nbdN device that is not currently connected.
-// It checks /sys/block/nbdN/size — the kernel reports 0 for disconnected NBD devices.
-func findFreeNBD() (string, error) {
-	for i := 0; i < 16; i++ {
-		sysPath := fmt.Sprintf("/sys/block/nbd%d/size", i)
-		data, err := os.ReadFile(sysPath)
-		if err != nil {
-			continue // device doesn't exist, skip
-		}
-		if strings.TrimSpace(string(data)) == "0" {
-			return fmt.Sprintf("/dev/nbd%d", i), nil
-		}
-	}
-	return "", fmt.Errorf("all /dev/nbd0..nbd15 devices are in use")
 }
 
 func (b *BootcManager) markFailed(build *BootcBuild, msg string) {
