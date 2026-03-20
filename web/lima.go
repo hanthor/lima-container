@@ -68,7 +68,7 @@ func (l *LimaCtl) run(args ...string) ([]byte, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
+		msg := extractLimaError(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
@@ -165,4 +165,37 @@ func parseNDJSON(data []byte) ([]Instance, error) {
 		instances = append(instances, inst)
 	}
 	return instances, nil
+}
+
+// extractLimaError pulls the most useful error message from limactl's
+// NDJSON log output. It prefers the last "fatal" or "error" level line's
+// "msg" field, falling back to the last non-empty line.
+func extractLimaError(raw string) string {
+	var lastMsg string
+	var lastFatal string
+
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Try to parse as limactl NDJSON log line.
+		var entry struct {
+			Level string `json:"level"`
+			Msg   string `json:"msg"`
+		}
+		if json.Unmarshal([]byte(line), &entry) == nil && entry.Msg != "" {
+			lastMsg = entry.Msg
+			if entry.Level == "fatal" || entry.Level == "error" {
+				lastFatal = entry.Msg
+			}
+		} else {
+			lastMsg = line
+		}
+	}
+
+	if lastFatal != "" {
+		return lastFatal
+	}
+	return strings.TrimSpace(lastMsg)
 }
