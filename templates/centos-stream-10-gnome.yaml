@@ -1,4 +1,4 @@
-# CentOS Stream 10 desktop test template for GUI validation over noVNC.
+# CentOS Stream 10 desktop test template for GUI validation over noVNC + RDP.
 images:
   - location: "https://cloud.centos.org/centos/10-stream/x86_64/images/CentOS-Stream-GenericCloud-10-latest.x86_64.qcow2"
     arch: "x86_64"
@@ -22,6 +22,12 @@ mounts:
 video:
   display: "vnc"
 
+# Forward RDP port so the container can proxy to it
+portForwards:
+  - guestPort: 3389
+    hostPort: 3389
+    proto: tcp
+
 containerd:
   system: false
   user: false
@@ -33,7 +39,7 @@ provision:
       set -euxo pipefail
       dnf makecache
       dnf group install -y "Server with GUI"
-      dnf install -y firefox
+      dnf install -y firefox gnome-remote-desktop
       systemctl set-default graphical.target
       systemctl enable gdm
       systemctl isolate graphical.target
@@ -43,3 +49,19 @@ provision:
       set -euxo pipefail
       # Set a login password for the desktop session
       echo "$(whoami):lima" | sudo chpasswd
+
+      # Wait for GNOME session bus to be available (needed for grdctl)
+      for i in $(seq 1 30); do
+        if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || \
+           [ -S "/run/user/$(id -u)/bus" ]; then
+          export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+          break
+        fi
+        sleep 2
+      done
+
+      # Enable GNOME Remote Desktop with RDP
+      grdctl rdp enable || true
+      grdctl rdp set-credentials "$(whoami)" lima || true
+      grdctl rdp disable-view-only || true
+      systemctl --user enable gnome-remote-desktop || true
