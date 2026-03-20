@@ -12,6 +12,12 @@ http://<host>:8006
 
 `GET /` redirects to `/dashboard/`. The dashboard SPA polls the API directly.
 
+The machine-readable OpenAPI 3.1 schema is served at:
+
+```
+GET /api/openapi.yaml
+```
+
 ## Response format
 
 All API responses use a consistent JSON envelope:

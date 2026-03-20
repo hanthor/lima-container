@@ -1,10 +1,14 @@
 package main
 
 import (
+	_ "embed"
 	"log"
 	"net/http"
 	"os"
 )
+
+//go:embed static/openapi.yaml
+var openAPISpec []byte
 
 func main() {
 	port := os.Getenv("LIMA_WEB_PORT")
@@ -61,6 +65,12 @@ func main() {
 	// Serve static dashboard files.
 	staticDir := "/usr/share/lima-web/static/"
 	mux.Handle("/dashboard/", http.StripPrefix("/dashboard/", http.FileServer(http.Dir(staticDir))))
+
+	// Serve OpenAPI spec.
+	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Write(openAPISpec)
+	})
 
 	logged := loggingMiddleware(mux)
 

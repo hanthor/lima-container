@@ -1,0 +1,634 @@
+openapi: "3.1.0"
+
+info:
+  title: lima-container API
+  version: "1.0"
+  description: |
+    REST API exposed by the `lima-web` Go server inside lima-container images.
+    Available in the `lima-web` and `lima-bootc` image variants.
+    All responses use `{"data": ...}` on success or `{"error": "..."}` on failure.
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8006
+    description: Local container
+
+tags:
+  - name: instances
+    description: Lima VM lifecycle management
+  - name: vnc
+    description: VNC console access
+  - name: shell
+    description: Browser-based SSH terminal
+  - name: templates
+    description: VM templates
+  - name: system
+    description: System information
+  - name: bootc
+    description: Bootc disk image builds (lima-bootc image only)
+
+paths:
+  /api/instances:
+    get:
+      operationId: listInstances
+      summary: List all VM instances
+      tags: [instances]
+      responses:
+        "200":
+          description: List of instances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceListResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/{name}:
+    get:
+      operationId: getInstance
+      summary: Get a single VM instance
+      tags: [instances]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: Instance details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InstanceResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteInstance
+      summary: Force-delete a VM instance
+      tags: [instances]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: Instance deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                data:
+                  status: deleted
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/create:
+    post:
+      operationId: createInstance
+      summary: Create and start a VM from a template
+      tags: [instances]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInstanceRequest"
+            example:
+              template: default
+              name: my-vm
+      responses:
+        "200":
+          description: Instance created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateInstanceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/{name}/start:
+    post:
+      operationId: startInstance
+      summary: Start a stopped VM
+      tags: [instances]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: Instance started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                data:
+                  status: started
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/{name}/stop:
+    post:
+      operationId: stopInstance
+      summary: Stop a running VM
+      tags: [instances]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: Instance stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                data:
+                  status: stopped
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/{name}/restart:
+    post:
+      operationId: restartInstance
+      summary: Restart a VM
+      tags: [instances]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: Instance restarted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+              example:
+                data:
+                  status: restarted
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/instances/{name}/vnc:
+    get:
+      operationId: getVNC
+      summary: Get VNC connection info for a running instance
+      tags: [vnc]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "200":
+          description: VNC connection details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VNCResponse"
+              example:
+                data:
+                  port: 5710
+                  password: "secret"
+                  url: "/vnc/vnc.html?autoconnect=1&resize=remote&path=websockify/my-vm&password=secret"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/instances/{name}/shell:
+    get:
+      operationId: shellWS
+      summary: Open a WebSocket SSH terminal session
+      description: |
+        Upgrades to a WebSocket connection that proxies an interactive SSH PTY session.
+
+        **Binary frames (server → client):** raw terminal output bytes.
+        **Binary frames (client → server):** keyboard input / paste.
+        **Text frames (client → server):** JSON resize event:
+        ```json
+        {"type": "resize", "cols": 220, "rows": 50}
+        ```
+      tags: [shell]
+      parameters:
+        - $ref: "#/components/parameters/instanceName"
+      responses:
+        "101":
+          description: WebSocket upgrade successful
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Instance is not running
+
+  /api/templates:
+    get:
+      operationId: listTemplates
+      summary: List available VM templates
+      tags: [templates]
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateListResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/info:
+    get:
+      operationId: getInfo
+      summary: Get system info and feature flags
+      tags: [system]
+      responses:
+        "200":
+          description: System information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InfoResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/bootc/builds:
+    get:
+      operationId: listBootcBuilds
+      summary: List all bootc builds
+      tags: [bootc]
+      responses:
+        "200":
+          description: List of builds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootcBuildListResponse"
+        "404":
+          description: Bootc not available in this image variant
+    post:
+      operationId: createBootcBuild
+      summary: Start an async bootc disk image build
+      description: |
+        Returns 202 Accepted immediately. Poll `GET /api/bootc/builds/{id}` for status
+        or stream `GET /api/bootc/builds/{id}/log` for live output.
+
+        **Pipeline steps:**
+        1. Build derived container image if customizations are specified
+        2. Allocate raw disk and attach via qemu-nbd
+        3. Run `bootc install to-disk` in a privileged inner container
+        4. Disconnect NBD device
+        5. Create and start Lima VM from the disk image
+      tags: [bootc]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBootcBuildRequest"
+            example:
+              image: "quay.io/fedora/fedora-bootc:42"
+              vm_name: my-fedora
+              customizations:
+                enable_ssh: false
+                enable_rdp: false
+                extra_packages: [vim, htop]
+                extra_containerfile: "RUN echo welcome > /etc/motd"
+      responses:
+        "202":
+          description: Build accepted and started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootcBuildResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Bootc not available in this image variant
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/bootc/builds/{id}:
+    get:
+      operationId: getBootcBuild
+      summary: Get status of a bootc build
+      tags: [bootc]
+      parameters:
+        - $ref: "#/components/parameters/buildId"
+      responses:
+        "200":
+          description: Build details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootcBuildResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/bootc/builds/{id}/log:
+    get:
+      operationId: streamBootcBuildLog
+      summary: Stream build log as Server-Sent Events
+      description: |
+        Streams log lines as SSE. Each `data:` line is one log entry.
+        The final message is `[DONE] status=complete` or `[DONE] status=failed`.
+        Already-completed builds stream the full log then close immediately.
+      tags: [bootc]
+      parameters:
+        - $ref: "#/components/parameters/buildId"
+      responses:
+        "200":
+          description: SSE stream of log lines
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                data: [INFO] Pulling quay.io/fedora/fedora-bootc:42
+
+                data: [INFO] Running bootc install to-disk
+
+                data: [DONE] status=complete
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    instanceName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Lima instance name
+    buildId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Build ID (e.g. `build-1774021161021`)
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+
+    StatusResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status]
+          properties:
+            status:
+              type: string
+
+    Instance:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+          example: my-vm
+        status:
+          type: string
+          enum: [Running, Stopped, Broken, Unknown]
+          example: Running
+        dir:
+          type: string
+          example: /var/lib/lima/my-vm
+        arch:
+          type: string
+          example: x86_64
+        cpus:
+          type: integer
+          example: 4
+        memory:
+          type: integer
+          description: Memory in bytes
+          example: 4294967296
+        disk:
+          type: integer
+          description: Disk size in bytes
+          example: 107374182400
+
+    InstanceResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Instance"
+
+    InstanceListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Instance"
+
+    CreateInstanceRequest:
+      type: object
+      properties:
+        template:
+          type: string
+          default: default
+          description: Template name (without .yaml extension)
+          example: default
+        name:
+          type: string
+          description: Instance name. Defaults to the template name.
+          example: my-vm
+
+    CreateInstanceResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, instance]
+          properties:
+            status:
+              type: string
+              example: created
+            instance:
+              type: string
+              description: Actual instance name created
+              example: my-vm
+            vnc_warning:
+              type: string
+              description: Present if VNC bridge failed to start (non-fatal)
+
+    VNCInfo:
+      type: object
+      required: [port, url]
+      properties:
+        port:
+          type: integer
+          description: WebSocket port for this instance's VNC bridge (5710–5799)
+          example: 5710
+        password:
+          type: string
+          description: VNC password (may be empty)
+          example: "secret"
+        url:
+          type: string
+          description: Ready-to-use noVNC URL path
+          example: "/vnc/vnc.html?autoconnect=1&resize=remote&path=websockify/my-vm&password=secret"
+
+    VNCResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/VNCInfo"
+
+    Template:
+      type: object
+      required: [name, filename, path]
+      properties:
+        name:
+          type: string
+          example: default
+        filename:
+          type: string
+          example: default.yaml
+        path:
+          type: string
+          example: /opt/lima/templates/default.yaml
+
+    TemplateListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Template"
+
+    InfoResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [bootc_enabled]
+          properties:
+            lima:
+              type: object
+              description: Raw limactl info output
+              additionalProperties: true
+            bootc_enabled:
+              type: boolean
+              description: Whether the bootc build pipeline is available in this image variant
+              example: true
+
+    BootcCustomizations:
+      type: object
+      properties:
+        enable_ssh:
+          type: boolean
+          default: false
+          description: Inject SSH keys into the image
+        enable_rdp:
+          type: boolean
+          default: false
+          description: Enable RDP in the image
+        extra_packages:
+          type: array
+          items:
+            type: string
+          description: Additional RPM packages to install
+          example: [vim, htop]
+        extra_containerfile:
+          type: string
+          description: Extra Containerfile instructions appended during derivation
+          example: "RUN echo welcome > /etc/motd"
+
+    BootcBuild:
+      type: object
+      required: [id, source_image, status, started_at]
+      properties:
+        id:
+          type: string
+          example: build-1774021161021
+        source_image:
+          type: string
+          description: Source bootc container image URI
+          example: quay.io/fedora/fedora-bootc:42
+        vm_name:
+          type: string
+          description: Lima VM name to create on build success
+          example: fedora-bootc
+        customizations:
+          $ref: "#/components/schemas/BootcCustomizations"
+        status:
+          type: string
+          enum: [pending, running, complete, failed]
+          example: complete
+        started_at:
+          type: string
+          format: date-time
+          example: "2026-03-20T15:39:21Z"
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-03-20T15:52:10Z"
+        error:
+          type: string
+          nullable: true
+          description: Error message if status is failed
+        output_path:
+          type: string
+          description: Path to the built disk image inside the container
+          example: /var/lib/lima-bootc-builds/build-1774021161021/disk.raw
+
+    BootcBuildResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/BootcBuild"
+
+    BootcBuildListResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BootcBuild"
+
+    CreateBootcBuildRequest:
+      type: object
+      required: [image]
+      properties:
+        image:
+          type: string
+          description: Source bootc container image URI
+          example: quay.io/fedora/fedora-bootc:42
+        vm_name:
+          type: string
+          description: Lima VM name to create on success. Auto-generated if omitted.
+          example: my-fedora
+        customizations:
+          $ref: "#/components/schemas/BootcCustomizations"
