@@ -16,10 +16,11 @@ type Handler struct {
 	vnc   *VNCManager
 	rdp   *RDPManager
 	bootc *BootcManager
+	tmpl  *Templates
 }
 
-func NewHandler(lima *LimaCtl, vnc *VNCManager, rdp *RDPManager, bootc *BootcManager) *Handler {
-	return &Handler{lima: lima, vnc: vnc, rdp: rdp, bootc: bootc}
+func NewHandler(lima *LimaCtl, vnc *VNCManager, rdp *RDPManager, bootc *BootcManager, tmpl *Templates) *Handler {
+	return &Handler{lima: lima, vnc: vnc, rdp: rdp, bootc: bootc, tmpl: tmpl}
 }
 
 // --- response helpers ---
@@ -40,7 +41,75 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// --- handlers ---
+// --- htmx helpers ---
+
+func isHTMX(r *http.Request) bool {
+	return r.Header.Get("HX-Request") == "true"
+}
+
+func htmxToast(w http.ResponseWriter, message, level string) {
+	msg := strings.ReplaceAll(message, `\`, `\\`)
+	msg = strings.ReplaceAll(msg, `"`, `\"`)
+	msg = strings.ReplaceAll(msg, "\n", `\n`)
+	w.Header().Set("HX-Trigger", fmt.Sprintf(`{"showToast":{"message":"%s","level":"%s"}}`, msg, level))
+}
+
+// --- template handlers ---
+
+// RenderDashboard serves the full page via Go template.
+func (h *Handler) RenderDashboard(w http.ResponseWriter, r *http.Request) {
+	h.tmpl.RenderHTML(w, "base", map[string]any{
+		"BootcEnabled": h.bootc != nil,
+	})
+}
+
+// PartialInstances returns just the instance card grid HTML.
+func (h *Handler) PartialInstances(w http.ResponseWriter, r *http.Request) {
+	instances, err := h.lima.List()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	h.tmpl.RenderHTML(w, "instances", instances)
+}
+
+// PartialBuilds returns the bootc builds list HTML.
+func (h *Handler) PartialBuilds(w http.ResponseWriter, r *http.Request) {
+	if h.bootc == nil {
+		w.WriteHeader(204)
+		return
+	}
+	builds := h.bootc.ListBuilds()
+	for i, j := 0, len(builds)-1; i < j; i, j = i+1, j-1 {
+		builds[i], builds[j] = builds[j], builds[i]
+	}
+	h.tmpl.RenderHTML(w, "builds", builds)
+}
+
+// PartialTemplateOptions returns <option> elements for the template select.
+func (h *Handler) PartialTemplateOptions(w http.ResponseWriter, r *http.Request) {
+	templateDir := "/opt/lima/templates"
+	entries, err := os.ReadDir(templateDir)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	type tmplInfo struct {
+		Name string
+	}
+	var templates []tmplInfo
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		templates = append(templates, tmplInfo{
+			Name: strings.TrimSuffix(e.Name(), ".yaml"),
+		})
+	}
+	h.tmpl.RenderHTML(w, "template-options", templates)
+}
+
+// --- JSON API handlers ---
 
 func (h *Handler) ListInstances(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.lima.List()
@@ -73,6 +142,7 @@ func (h *Handler) GetInstance(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) StartInstance(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.lima.Start(name); err != nil {
+		htmxToast(w, "Start failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -80,12 +150,14 @@ func (h *Handler) StartInstance(w http.ResponseWriter, r *http.Request) {
 	// Attempt to start VNC bridge after starting the instance.
 	if err := h.vnc.StartVNC(name); err != nil {
 		// Non-fatal: instance started but VNC may not be available yet.
+		htmxToast(w, "Started "+name+" (VNC warning: "+err.Error()+")", "success")
 		writeData(w, map[string]any{
 			"status":      "started",
 			"vnc_warning": err.Error(),
 		})
 		return
 	}
+	htmxToast(w, "Started "+name, "success")
 	writeData(w, map[string]string{"status": "started"})
 }
 
@@ -96,9 +168,11 @@ func (h *Handler) StopInstance(w http.ResponseWriter, r *http.Request) {
 	_ = h.vnc.StopVNC(name)
 
 	if err := h.lima.Stop(name); err != nil {
+		htmxToast(w, "Stop failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	htmxToast(w, "Stopped "+name, "success")
 	writeData(w, map[string]string{"status": "stopped"})
 }
 
@@ -108,23 +182,27 @@ func (h *Handler) RestartInstance(w http.ResponseWriter, r *http.Request) {
 	_ = h.vnc.StopVNC(name)
 
 	if err := h.lima.Stop(name); err != nil {
+		htmxToast(w, "Restart failed (stop): "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError,
 			fmt.Sprintf("stop failed: %s", err.Error()))
 		return
 	}
 	if err := h.lima.Start(name); err != nil {
+		htmxToast(w, "Restart failed (start): "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError,
 			fmt.Sprintf("start failed: %s", err.Error()))
 		return
 	}
 
 	if err := h.vnc.StartVNC(name); err != nil {
+		htmxToast(w, "Restarted "+name+" (VNC warning: "+err.Error()+")", "success")
 		writeData(w, map[string]any{
 			"status":      "restarted",
 			"vnc_warning": err.Error(),
 		})
 		return
 	}
+	htmxToast(w, "Restarted "+name, "success")
 	writeData(w, map[string]string{"status": "restarted"})
 }
 
@@ -134,9 +212,11 @@ func (h *Handler) DeleteInstance(w http.ResponseWriter, r *http.Request) {
 	_ = h.vnc.StopVNC(name)
 
 	if err := h.lima.Delete(name); err != nil {
+		htmxToast(w, "Delete failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	htmxToast(w, "Deleted "+name, "success")
 	writeData(w, map[string]string{"status": "deleted"})
 }
 
@@ -185,6 +265,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.lima.Create(templatePath, req.Name); err != nil {
+		htmxToast(w, "Create failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -198,6 +279,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.vnc.StartVNC(instanceName); err != nil {
+		htmxToast(w, "Created "+instanceName+" (VNC warning: "+err.Error()+")", "success")
 		writeData(w, map[string]any{
 			"status":      "created",
 			"instance":    instanceName,
@@ -205,6 +287,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	htmxToast(w, "Created "+instanceName, "success")
 	writeData(w, map[string]any{
 		"status":   "created",
 		"instance": instanceName,
@@ -271,14 +354,17 @@ func (h *Handler) CreateBootcBuild(w http.ResponseWriter, r *http.Request) {
 		Customizations *Customizations `json:"customizations,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Image == "" {
+		htmxToast(w, "Image is required", "error")
 		writeError(w, http.StatusBadRequest, "image is required")
 		return
 	}
 	build, err := h.bootc.StartBuild(req.Image, req.VMName, req.Customizations)
 	if err != nil {
+		htmxToast(w, "Build failed: "+err.Error(), "error")
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	htmxToast(w, "Build started: "+build.ID, "success")
 	writeJSON(w, http.StatusAccepted, map[string]any{"data": build})
 }
 

@@ -1,0 +1,17 @@
+{{define "build-card"}}
+<div class="instance-card">
+  <div class="card-header">
+    <h3>{{if .VMName}}{{.VMName}}{{else}}{{.ID}}{{end}}</h3>
+    <span class="badge {{if eq .Status "complete"}}badge-running{{else if eq .Status "failed"}}badge-stopped{{else}}badge-other{{end}}">{{.Status}}</span>
+  </div>
+  <div class="card-meta">
+    <span><span class="meta-label">Image</span> {{.SourceImage}}</span>
+  </div>
+  {{if .Error}}
+  <div style="font-size:0.8rem;color:var(--red);margin-top:0.25rem;">{{.Error}}</div>
+  {{end}}
+  <div class="card-actions">
+    <button class="btn btn-secondary" onclick="viewBuildLog('{{.ID}}')">View Log</button>
+  </div>
+</div>
+{{end}}

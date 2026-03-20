@@ -32,7 +32,7 @@ func main() {
 		bootcMgr = NewBootcManager(lima)
 		log.Println("bootc-image-builder support enabled")
 	}
-	h := NewHandler(lima, vnc, rdpMgr, bootcMgr)
+	h := NewHandler(lima, vnc, rdpMgr, bootcMgr, NewTemplates())
 
 	// Scan for already-running instances and start their VNC bridges.
 	if instances, err := lima.List(); err == nil {
@@ -69,9 +69,17 @@ func main() {
 	mux.HandleFunc("GET /api/bootc/builds/{id}", h.GetBootcBuild)
 	mux.HandleFunc("GET /api/bootc/builds/{id}/log", h.StreamBootcBuildLog)
 
-	// Serve static dashboard files.
+	// Dashboard page (server-rendered)
+	mux.HandleFunc("GET /dashboard/{$}", h.RenderDashboard)
+
+	// htmx partial endpoints
+	mux.HandleFunc("GET /dashboard/partials/instances", h.PartialInstances)
+	mux.HandleFunc("GET /dashboard/partials/builds", h.PartialBuilds)
+	mux.HandleFunc("GET /dashboard/partials/template-options", h.PartialTemplateOptions)
+
+	// Static assets (CSS, JS, OpenAPI, etc.)
 	staticDir := "/usr/share/lima-web/static/"
-	mux.Handle("/dashboard/", http.StripPrefix("/dashboard/", http.FileServer(http.Dir(staticDir))))
+	mux.Handle("GET /dashboard/", http.StripPrefix("/dashboard/", http.FileServer(http.Dir(staticDir))))
 
 	// Serve OpenAPI spec.
 	mux.HandleFunc("GET /api/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {

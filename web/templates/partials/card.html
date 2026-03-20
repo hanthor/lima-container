@@ -1,0 +1,42 @@
+{{define "instance-card"}}
+<div class="instance-card" id="card-{{.Name}}">
+  <div class="card-header">
+    <h3>{{.Name}}</h3>
+    <span class="badge {{badgeClass .Status}}">{{.Status}}</span>
+  </div>
+  <div class="card-meta">
+    <span><span class="meta-label">Arch</span> {{.Arch}}</span>
+    <span><span class="meta-label">CPUs</span> {{if .CPUs}}{{.CPUs}}{{else}}—{{end}}</span>
+    <span><span class="meta-label">Mem</span> {{humanBytes .Memory}}</span>
+    <span><span class="meta-label">Disk</span> {{humanBytes .Disk}}</span>
+  </div>
+  <div class="card-actions">
+    {{if eq (lower .Status) "running"}}
+    <button class="btn btn-red"
+            hx-post="/api/instances/{{.Name}}/stop"
+            hx-swap="none">⏹ Stop</button>
+    <button class="btn btn-secondary"
+            hx-post="/api/instances/{{.Name}}/restart"
+            hx-swap="none">🔄 Restart</button>
+    <button class="btn btn-blue"
+            onclick="openConsole('{{.Name}}')">🖥 Console</button>
+    <button class="btn btn-secondary"
+            onclick="openTerminal('{{.Name}}')">⌨ Terminal</button>
+    <button class="btn btn-secondary"
+            onclick="openRDP('{{.Name}}')">🖥️ RDP</button>
+    {{else if eq (lower .Status) "stopped"}}
+    <button class="btn btn-green"
+            hx-post="/api/instances/{{.Name}}/start"
+            hx-swap="none">▶ Start</button>
+    <button class="btn btn-outline-red"
+            hx-delete="/api/instances/{{.Name}}"
+            hx-swap="none"
+            hx-confirm="Delete instance '{{.Name}}'? This cannot be undone.">🗑 Delete</button>
+    {{else}}
+    <button class="btn btn-red"
+            hx-post="/api/instances/{{.Name}}/stop"
+            hx-swap="none">⏹ Stop</button>
+    {{end}}
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,147 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lima VM Manager</title>
+  <link rel="stylesheet" href="/dashboard/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0/lib/addon-web-links.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Lima VM Manager</h1>
+    <div style="display:flex;gap:0.5rem;">
+      {{if .BootcEnabled}}
+      <button class="btn btn-secondary"
+              onclick="document.getElementById('bootc-modal-overlay').classList.remove('hidden')">
+        Build from bootc image
+      </button>
+      {{end}}
+      <button class="btn btn-primary"
+              onclick="document.getElementById('modal-overlay').classList.remove('hidden'); htmx.trigger('#template-select','load')">
+        + Create VM
+      </button>
+    </div>
+  </header>
+
+  <div id="toast-area"></div>
+
+  <main>
+    <!-- Instance list: auto-polls every 5s via htmx -->
+    <div id="instance-list" class="instance-grid"
+         hx-get="/dashboard/partials/instances"
+         hx-trigger="load, every 5s"
+         hx-swap="innerHTML">
+      <p class="placeholder">Loading instances…</p>
+    </div>
+
+    {{if .BootcEnabled}}
+    <section style="margin-top:2rem;">
+      <h2 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-muted);">bootc Builds</h2>
+      <div id="bootc-builds-list" class="instance-grid"
+           hx-get="/dashboard/partials/builds"
+           hx-trigger="load, every 5s"
+           hx-swap="innerHTML">
+      </div>
+    </section>
+    {{end}}
+  </main>
+
+  <!-- bootc Modal (static in page, toggled by JS) -->
+  {{if .BootcEnabled}}
+  <div id="bootc-modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Build from bootc image</h2>
+        <button class="btn-icon" onclick="document.getElementById('bootc-modal-overlay').classList.add('hidden')">✕</button>
+      </div>
+      <form hx-post="/api/bootc/builds" hx-swap="none" hx-encoding="application/json"
+            onsubmit="return submitBootcForm(this)">
+        <div class="modal-body">
+          <label for="bootc-image-input">Container image URI</label>
+          <input type="text" id="bootc-image-input" name="image" placeholder="quay.io/fedora/fedora-bootc:42"
+                 style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+          <label for="bootc-name-input" style="margin-top:0.5rem;">VM name (optional)</label>
+          <input type="text" id="bootc-name-input" name="vm_name" placeholder="auto-generated"
+                 style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+          <details style="margin-top:1rem;">
+            <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text-muted);user-select:none;">
+              Customizations (optional)
+            </summary>
+            <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.5rem;">
+              <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
+                <input type="checkbox" id="bootc-ssh-check" name="enable_ssh"> Enable SSH
+              </label>
+              <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;">
+                <input type="checkbox" id="bootc-rdp-check" name="enable_rdp"> Enable RDP
+              </label>
+              <label for="bootc-packages-input" style="font-size:0.9rem;margin-top:0.25rem;">Extra packages</label>
+              <input type="text" id="bootc-packages-input" name="extra_packages" placeholder="vim curl htop"
+                     style="padding:0.5rem 0.65rem;font-size:0.9rem;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;">
+              <label for="bootc-containerfile-input" style="font-size:0.9rem;margin-top:0.25rem;">Custom Containerfile instructions</label>
+              <textarea id="bootc-containerfile-input" name="extra_containerfile" rows="4" placeholder="RUN echo hello > /etc/motd"
+                        style="padding:0.5rem 0.65rem;font-size:0.85rem;font-family:monospace;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);outline:none;width:100%;resize:vertical;"></textarea>
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary"
+                  onclick="document.getElementById('bootc-modal-overlay').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Start Build</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Create VM Modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Create VM</h2>
+        <button class="btn-icon" onclick="document.getElementById('modal-overlay').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="template-select">Template</label>
+        <select id="template-select"
+                hx-get="/dashboard/partials/template-options"
+                hx-trigger="load"
+                hx-swap="innerHTML">
+          <option value="">Loading templates…</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary"
+                onclick="document.getElementById('modal-overlay').classList.add('hidden')">Cancel</button>
+        <button class="btn btn-primary"
+                hx-post="/api/instances/create"
+                hx-vals="js:{template: document.getElementById('template-select').value}"
+                hx-swap="none">Create</button>
+      </div>
+      <div id="create-status" class="create-status hidden">
+        <div class="spinner"></div>
+        <span>Creating instance…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Modal (managed by JS — xterm.js needs imperative control) -->
+  <div id="terminal-modal-overlay" class="terminal-overlay hidden">
+    <div class="terminal-modal">
+      <div class="terminal-modal-header">
+        <span class="terminal-modal-title" id="terminal-modal-title">Terminal</span>
+        <button class="btn-icon" id="terminal-modal-close">✕</button>
+      </div>
+      <div class="terminal-modal-body" id="terminal-container"></div>
+    </div>
+  </div>
+
+  <script src="/dashboard/app.js"></script>
+</body>
+</html>
+{{end}}

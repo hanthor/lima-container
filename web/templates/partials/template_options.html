@@ -1,0 +1,8 @@
+{{define "template-options"}}
+{{range .}}
+<option value="{{.Name}}">{{.Name}}</option>
+{{end}}
+{{if not .}}
+<option value="">No templates available</option>
+{{end}}
+{{end}}

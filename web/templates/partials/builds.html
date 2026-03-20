@@ -1,0 +1,7 @@
+{{define "builds"}}
+{{if not .}}
+<p class="placeholder">No bootc builds yet.</p>
+{{else}}
+{{range .}}{{template "build-card" .}}{{end}}
+{{end}}
+{{end}}

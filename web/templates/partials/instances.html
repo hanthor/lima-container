@@ -1,0 +1,7 @@
+{{define "instances"}}
+{{if not .}}
+<p class="placeholder">No instances found. Click <strong>+ Create VM</strong> to get started.</p>
+{{else}}
+{{range .}}{{template "instance-card" .}}{{end}}
+{{end}}
+{{end}}
