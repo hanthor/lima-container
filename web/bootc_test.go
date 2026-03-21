@@ -42,11 +42,17 @@ func TestContainerfile_SSHOnly(t *testing.T) {
 
 func TestContainerfile_RDPOnly(t *testing.T) {
 	cf := generateContainerfile("img:latest", &Customizations{EnableRDP: true})
-	if !strings.Contains(cf, "xrdp") {
-		t.Fatal("expected xrdp install")
+	if !strings.Contains(cf, "gnome-remote-desktop") {
+		t.Fatal("expected gnome-remote-desktop install")
 	}
-	if !strings.Contains(cf, "systemctl enable xrdp") {
-		t.Fatal("expected systemctl enable xrdp")
+	if !strings.Contains(cf, "setup-rdp.sh") {
+		t.Fatal("expected setup-rdp.sh script")
+	}
+	if !strings.Contains(cf, "gnome-rdp-setup.service") {
+		t.Fatal("expected gnome-rdp-setup.service")
+	}
+	if !strings.Contains(cf, "gnome-remote-desktop.service") {
+		t.Fatal("expected gnome-remote-desktop.service enabled")
 	}
 	if strings.Contains(cf, "openssh-server") {
 		t.Fatal("openssh-server should not appear when only RDP is enabled")
@@ -58,11 +64,11 @@ func TestContainerfile_SSHAndRDP(t *testing.T) {
 	if !strings.Contains(cf, "openssh-server") {
 		t.Fatal("expected openssh-server")
 	}
-	if !strings.Contains(cf, "xrdp") {
-		t.Fatal("expected xrdp")
+	if !strings.Contains(cf, "gnome-remote-desktop") {
+		t.Fatal("expected gnome-remote-desktop")
 	}
-	if !strings.Contains(cf, "systemctl enable sshd xrdp") {
-		t.Fatal("expected both units enabled together")
+	if !strings.Contains(cf, "systemctl enable sshd gnome-rdp-setup.service gnome-remote-desktop.service") {
+		t.Fatal("expected all units enabled together")
 	}
 }
 
@@ -110,13 +116,13 @@ func TestContainerfile_AllCustomizations(t *testing.T) {
 	if !strings.Contains(cf, "openssh-server") {
 		t.Fatal("missing openssh-server")
 	}
-	if !strings.Contains(cf, "xrdp") {
-		t.Fatal("missing xrdp")
+	if !strings.Contains(cf, "gnome-remote-desktop") {
+		t.Fatal("missing gnome-remote-desktop")
 	}
 	if !strings.Contains(cf, "dnf install -y curl jq") {
 		t.Fatal("missing extra packages")
 	}
-	if !strings.Contains(cf, "systemctl enable sshd xrdp") {
+	if !strings.Contains(cf, "systemctl enable sshd gnome-rdp-setup.service gnome-remote-desktop.service") {
 		t.Fatal("missing systemctl enable")
 	}
 	if !strings.Contains(cf, "RUN touch /marker") {

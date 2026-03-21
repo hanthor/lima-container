@@ -126,36 +126,92 @@ func (b *BootcManager) StartBuild(sourceImage, vmName string, customizations *Cu
 	return build, nil
 }
 
+// setupRDPScript is embedded verbatim into the Containerfile as a firstboot
+// systemd oneshot service. It runs before gnome-remote-desktop.service on first
+// boot, generates a self-signed TLS cert, and configures grdctl --system so RDP
+// is available at the GDM login screen (remote login, no user session needed).
+const setupRDPScript = `#!/usr/bin/env bash
+set -euo pipefail
+CERT_DIR=/etc/gnome-remote-desktop
+MARKER="$CERT_DIR/.rdp-configured"
+[[ -f "$MARKER" ]] && exit 0
+mkdir -p "$CERT_DIR"
+openssl req -new -x509 -days 3650 -nodes \
+    -out  "$CERT_DIR/rdp-tls.crt" \
+    -keyout "$CERT_DIR/rdp-tls.key" \
+    -subj "/CN=lima-rdp"
+chown gnome-remote-desktop:gnome-remote-desktop \
+    "$CERT_DIR/rdp-tls.crt" "$CERT_DIR/rdp-tls.key"
+grdctl --system rdp enable
+grdctl --system rdp set-tls-cert "$CERT_DIR/rdp-tls.crt"
+grdctl --system rdp set-tls-key  "$CERT_DIR/rdp-tls.key"
+grdctl --system rdp set-credentials lima lima
+grdctl --system rdp disable-view-only
+touch "$MARKER"
+`
+
+const setupRDPUnit = `[Unit]
+Description=First-boot GNOME Remote Desktop RDP setup
+Before=gnome-remote-desktop.service
+After=local-fs.target
+ConditionPathExists=!/etc/gnome-remote-desktop/.rdp-configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/setup-rdp.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+`
+
 // generateContainerfile produces a Containerfile that applies the requested
 // customizations on top of the source image.
 func generateContainerfile(sourceImage string, c *Customizations) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("FROM %s\n\n", sourceImage))
 
-	// Collect systemd units to enable
 	var enableUnits []string
 
 	if c.EnableSSH {
 		sb.WriteString("# Ensure sshd is installed and enabled\n")
-		sb.WriteString("RUN command -v sshd >/dev/null 2>&1 || (dnf install -y openssh-server 2>/dev/null || apt-get install -y openssh-server 2>/dev/null || true)\n")
+		sb.WriteString("RUN command -v sshd >/dev/null 2>&1 || " +
+			"dnf install -y openssh-server 2>/dev/null || " +
+			"apt-get install -y openssh-server 2>/dev/null || true\n")
 		enableUnits = append(enableUnits, "sshd")
 	}
 
 	if c.EnableRDP {
-		sb.WriteString("# Install and enable xrdp for RDP access\n")
-		sb.WriteString("RUN dnf install -y xrdp 2>/dev/null || apt-get install -y xrdp 2>/dev/null || true\n")
-		enableUnits = append(enableUnits, "xrdp")
+		// Use GNOME Remote Desktop in --system mode so RDP is available at the
+		// GDM login screen without a user session. A firstboot oneshot service
+		// generates a self-signed TLS cert and configures credentials via grdctl.
+		sb.WriteString("# Install gnome-remote-desktop + openssl (RDP via grdctl --system)\n")
+		sb.WriteString("RUN command -v grdctl >/dev/null 2>&1 || " +
+			"dnf install -y gnome-remote-desktop openssl 2>/dev/null || " +
+			"apt-get install -y gnome-remote-desktop openssl 2>/dev/null || true\n\n")
+
+		// Write the firstboot setup script inline.
+		sb.WriteString("# Embed firstboot RDP setup script\n")
+		sb.WriteString("RUN printf '%s' " + shellQuote(setupRDPScript) +
+			" > /usr/local/bin/setup-rdp.sh && chmod +x /usr/local/bin/setup-rdp.sh\n\n")
+
+		// Write the systemd unit inline.
+		sb.WriteString("# Embed gnome-rdp-setup.service\n")
+		sb.WriteString("RUN printf '%s' " + shellQuote(setupRDPUnit) +
+			" > /etc/systemd/system/gnome-rdp-setup.service\n\n")
+
+		enableUnits = append(enableUnits, "gnome-rdp-setup.service", "gnome-remote-desktop.service")
 	}
 
 	if len(c.ExtraPackages) > 0 {
 		pkgs := strings.Join(c.ExtraPackages, " ")
-		sb.WriteString(fmt.Sprintf("\n# Extra packages\n"))
-		sb.WriteString(fmt.Sprintf("RUN dnf install -y %s 2>/dev/null || apt-get install -y %s 2>/dev/null || true\n", pkgs, pkgs))
+		sb.WriteString("# Extra packages\n")
+		sb.WriteString(fmt.Sprintf("RUN dnf install -y %s 2>/dev/null || apt-get install -y %s 2>/dev/null || true\n\n", pkgs, pkgs))
 	}
 
 	if len(enableUnits) > 0 {
 		units := strings.Join(enableUnits, " ")
-		sb.WriteString(fmt.Sprintf("\n# Enable systemd services\n"))
+		sb.WriteString("# Enable systemd services\n")
 		sb.WriteString(fmt.Sprintf("RUN systemctl enable %s\n", units))
 	}
 
@@ -166,6 +222,11 @@ func generateContainerfile(sourceImage string, c *Customizations) string {
 	}
 
 	return sb.String()
+}
+
+// shellQuote wraps s in single quotes, escaping any embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // buildDerivedImage generates a Containerfile, builds a local image, and returns

@@ -482,7 +482,9 @@
         onDisconnected('Session ended');
       } catch (err) {
         console.error('RDP connection error:', err);
-        const msg = err.message || String(err);
+        const msg = (err && typeof err.backtrace === 'function')
+          ? err.backtrace()
+          : (err && err.message) || JSON.stringify(err) || String(err);
         setStatus('Connection failed', 'error');
         onDisconnected(msg);
       }

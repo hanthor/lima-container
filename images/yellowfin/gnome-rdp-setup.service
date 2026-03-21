@@ -1,0 +1,15 @@
+[Unit]
+Description=First-boot GNOME Remote Desktop RDP setup
+# Must run before gnome-remote-desktop tries to bind port 3389.
+Before=gnome-remote-desktop.service
+After=local-fs.target
+# Only run once — skip if cert already exists.
+ConditionPathExists=!/etc/gnome-remote-desktop/.rdp-configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/setup-rdp.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

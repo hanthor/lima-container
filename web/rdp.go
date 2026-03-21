@@ -122,13 +122,16 @@ func (m *RDPManager) GetRDPInfo(instance string) (map[string]any, error) {
 func (m *RDPManager) HandleRDPProxy(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
+	// Look up registered port, fall back to Lima's portForward default (3389).
 	m.mu.Lock()
 	e, ok := m.entries[name]
 	m.mu.Unlock()
 
-	if !ok {
-		http.Error(w, "no RDP registered for instance "+name, http.StatusNotFound)
-		return
+	rdpPort := 3389
+	if ok {
+		rdpPort = e.RDPPort
+	} else {
+		log.Printf("RDP no registration for %q, using default port %d", name, rdpPort)
 	}
 
 	ws, err := rdpUpgrader.Upgrade(w, r, nil)
@@ -156,9 +159,8 @@ func (m *RDPManager) HandleRDPProxy(w http.ResponseWriter, r *http.Request) {
 	log.Printf("RDP RDCleanPath request for %q: version=%d dest=%s",
 		name, req.Version, req.Destination)
 
-	// Phase 2: Connect to the RDP server.
-	// Override destination with the registered port for security.
-	addr := fmt.Sprintf("127.0.0.1:%d", e.RDPPort)
+	// Phase 2: Connect to the RDP server via Lima's port forward.
+	addr := fmt.Sprintf("127.0.0.1:%d", rdpPort)
 	tcp, err := net.DialTimeout("tcp", addr, 5*time.Second)
 	if err != nil {
 		log.Printf("RDP TCP dial failed for %q (%s): %v", name, addr, err)

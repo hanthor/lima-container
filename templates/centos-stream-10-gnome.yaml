@@ -43,25 +43,27 @@ provision:
       systemctl set-default graphical.target
       systemctl enable gdm
       systemctl isolate graphical.target
-  - mode: user
+  - mode: system
     script: |
       #!/usr/bin/env bash
       set -euxo pipefail
       # Set a login password for the desktop session
-      echo "$(whoami):lima" | sudo chpasswd
+      echo "lima:lima" | chpasswd
 
-      # Wait for GNOME session bus to be available (needed for grdctl)
-      for i in $(seq 1 30); do
-        if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || \
-           [ -S "/run/user/$(id -u)/bus" ]; then
-          export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
-          break
-        fi
-        sleep 2
-      done
+      # Configure GNOME Remote Desktop RDP in system mode (no GNOME keyring needed).
+      # Generate a self-signed TLS certificate for RDP.
+      CERT_DIR=/etc/gnome-remote-desktop
+      mkdir -p "$CERT_DIR"
+      openssl req -new -x509 -days 3650 -nodes \
+        -out "$CERT_DIR/rdp-tls.crt" \
+        -keyout "$CERT_DIR/rdp-tls.key" \
+        -subj "/CN=lima-rdp"
+      chown gnome-remote-desktop:gnome-remote-desktop \
+        "$CERT_DIR/rdp-tls.crt" "$CERT_DIR/rdp-tls.key"
 
-      # Enable GNOME Remote Desktop with RDP
-      grdctl rdp enable || true
-      grdctl rdp set-credentials "$(whoami)" lima || true
-      grdctl rdp disable-view-only || true
-      systemctl --user enable gnome-remote-desktop || true
+      grdctl --system rdp enable
+      grdctl --system rdp set-tls-cert "$CERT_DIR/rdp-tls.crt"
+      grdctl --system rdp set-tls-key "$CERT_DIR/rdp-tls.key"
+      grdctl --system rdp set-credentials lima lima
+      grdctl --system rdp disable-view-only
+      systemctl enable gnome-remote-desktop
