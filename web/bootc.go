@@ -247,8 +247,10 @@ func (b *BootcManager) buildDerivedImage(build *BootcBuild, outDir string, logFi
 	cmd := exec.Command("podman", "build",
 		"--tag", localTag,
 		"--file", containerfilePath,
-		"--network=host", // avoids netavark/nftables issues inside a privileged container
+		"--network=host",  // avoids netavark/nftables issues inside a privileged container
 		"--no-cache",
+		"--security-opt", "label=disable", // bootc images need relaxed SELinux during build
+		"--cap-add", "SYS_ADMIN",          // crun needs this to create the container overlay
 		outDir, // build context (Containerfile only, no ADD/COPY needed)
 	)
 	cmd.Stdout = logFile
