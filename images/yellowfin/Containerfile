@@ -1,6 +1,6 @@
 # yellowfin:gnome50 — Fedora bootc image with GNOME 50 and system-mode RDP
 # via gnome-remote-desktop (grdctl --system), available at the GDM login screen.
-FROM quay.io/fedora/fedora-bootc:42
+FROM quay.io/fedora/fedora-bootc:42@sha256:927960c6b65923d6dfd6ad30d61c403cd56eac354d4195ff1e0ac920c0363b74
 
 # Install GNOME desktop, gnome-remote-desktop, and openssl for TLS cert generation.
 RUN dnf install -y \
