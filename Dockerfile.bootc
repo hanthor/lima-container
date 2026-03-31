@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Stage 0: Fetch IronRDP WASM from npm ──
-FROM node:22-alpine AS wasm-fetch
+FROM node:24-alpine@sha256:01743339035a5c3c11a373cd7c83aeab6ed1457b55da6a69e014a95ac4e4700b AS wasm-fetch
 WORKDIR /wasm
 RUN npm pack ironrdp-wasm@1.0.1 --quiet 2>/dev/null && \
     tar xzf ironrdp-wasm-*.tgz && \
