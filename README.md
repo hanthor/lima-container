@@ -61,12 +61,79 @@ services:
     restart: unless-stopped
 ```
 
+## REST API
+
+The `lima-web` and `lima-bootc` images expose a REST API at `http://localhost:8006/api/`. The machine-readable OpenAPI spec is at `/api/openapi.yaml`.
+
+All responses use a JSON envelope: `{"data": …}` on success, `{"error": "…"}` on failure.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/instances` | List all VMs |
+| `GET` | `/api/instances/{name}` | Get VM details |
+| `POST` | `/api/instances/create` | Create a VM from a template |
+| `POST` | `/api/instances/{name}/start` | Start a VM |
+| `POST` | `/api/instances/{name}/stop` | Stop a VM |
+| `POST` | `/api/instances/{name}/restart` | Restart a VM |
+| `DELETE` | `/api/instances/{name}` | Delete a VM |
+| `GET` | `/api/instances/{name}/vnc` | VNC connection info + noVNC URL |
+| `GET` | `/api/instances/{name}/rdp/status` | RDP availability + type (`grd`/`xrdp`/`none`) |
+| `POST` | `/api/instances/{name}/rdp/enable` | Enable RDP with credentials |
+| `GET` | `/api/instances/{name}/shell` | Interactive shell (WebSocket) |
+| `POST` | `/api/images/upload` | Upload a `.qcow2`/`.img`/`.raw`/`.yaml` and start a VM |
+| `POST` | `/api/images/fetch` | Fetch an image from a URL and start a VM (async) |
+| `GET` | `/api/templates` | List built-in VM templates |
+| `GET` | `/api/info` | Lima version + feature flags |
+| `GET` | `/api/bootc/builds` | List bootc builds (`lima-bootc` only) |
+| `POST` | `/api/bootc/builds` | Start a bootc build (async, `lima-bootc` only) |
+| `GET` | `/api/bootc/builds/{id}` | Get build status |
+| `GET` | `/api/bootc/builds/{id}/log` | Stream build log (Server-Sent Events) |
+
+```bash
+BASE=http://localhost:8006
+
+# Check which features are enabled
+curl -s $BASE/api/info | jq '{bootc: .data.bootc_enabled}'
+
+# List VMs
+curl -s $BASE/api/instances | jq '.data[].name'
+
+# Create a VM from a built-in template, then open its VNC console
+curl -s -X POST $BASE/api/instances/create \
+  -H 'Content-Type: application/json' \
+  -d '{"template": "default", "name": "my-vm"}'
+curl -s $BASE/api/instances/my-vm/vnc | jq -r '.data.url'
+
+# Lifecycle
+curl -X POST   $BASE/api/instances/my-vm/start
+curl -X POST   $BASE/api/instances/my-vm/stop
+curl -X DELETE $BASE/api/instances/my-vm
+
+# Upload a local qcow2 and create a VM from it
+curl -X POST $BASE/api/images/upload \
+  -F file=@./my-disk.qcow2 -F name=my-vm
+
+# Fetch a remote image and create a VM (returns 202 immediately)
+curl -X POST $BASE/api/images/fetch \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://example.com/my-disk.qcow2", "name": "my-vm"}'
+
+# Start a bootc build and tail the log
+BUILD=$(curl -s -X POST $BASE/api/bootc/builds \
+  -H 'Content-Type: application/json' \
+  -d '{"image": "quay.io/fedora/fedora-bootc:42", "vm_name": "fedora"}' \
+  | jq -r '.data.id')
+curl -N $BASE/api/bootc/builds/$BUILD/log
+```
+
+See [docs/api.md](docs/api.md) for the full reference including request/response shapes and WebSocket protocol details.
+
 ## Documentation
 
 | Topic | Link |
 |-------|------|
 | Templates, env vars, persistence | [docs/configuration.md](docs/configuration.md) |
-| Bootc builder, customization, REST API | [docs/bootc.md](docs/bootc.md) |
+| Bootc builder, customization | [docs/bootc.md](docs/bootc.md) |
 | Quadlet / systemd service files | [docs/quadlet.md](docs/quadlet.md) |
 | Full REST API reference | [docs/api.md](docs/api.md) |
 | Internal architecture | [docs/architecture.md](docs/architecture.md) |

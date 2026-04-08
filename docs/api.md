@@ -47,8 +47,12 @@ HTTP status codes: `200 OK`, `202 Accepted` (async), `400 Bad Request`, `404 Not
 | `POST` | `/api/instances/{name}/stop` | Stop a VM |
 | `POST` | `/api/instances/{name}/restart` | Restart a VM |
 | `DELETE` | `/api/instances/{name}` | Delete a VM |
-| `GET` | `/api/instances/{name}/vnc` | VNC connection info |
+| `GET` | `/api/instances/{name}/vnc` | VNC connection info + noVNC URL |
+| `GET` | `/api/instances/{name}/rdp/status` | RDP availability + type (`grd`/`xrdp`/`none`) |
+| `POST` | `/api/instances/{name}/rdp/enable` | Enable RDP with credentials |
 | `GET` | `/api/instances/{name}/shell` | Shell terminal (WebSocket) |
+| `POST` | `/api/images/upload` | Upload a `.qcow2`/`.img`/`.raw`/`.yaml` and start a VM |
+| `POST` | `/api/images/fetch` | Fetch an image from a URL and start a VM (async) |
 | `GET` | `/api/templates` | List VM templates |
 | `GET` | `/api/info` | System info + feature flags |
 | `GET` | `/api/bootc/builds` | List bootc builds |
@@ -228,7 +232,174 @@ The underlying WebSocket endpoint is `ws://<host>:8006/websockify/{name}`, handl
 
 ---
 
-## Shell terminal (WebSocket)
+## RDP console
+
+> **Note:** RDP requires a running desktop session with `gnome-remote-desktop` or `xrdp` installed inside the guest. It is not available for live ISOs or images that haven't been provisioned with an RDP server.
+
+### Get RDP info
+
+```
+GET /api/instances/{name}/rdp
+```
+
+Returns basic RDP connection info (host and port).
+
+**Response:**
+```json
+{
+  "data": {
+    "host": "localhost",
+    "port": 3389
+  }
+}
+```
+
+---
+
+### Get RDP status
+
+```
+GET /api/instances/{name}/rdp/status
+```
+
+Checks whether an RDP server is available and listening inside the VM.
+
+**Response:**
+```json
+{
+  "data": {
+    "available": true,
+    "type": "grd",
+    "port": 3389,
+    "enabled": true
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `available` | `true` if an RDP server binary was found in the guest |
+| `type` | `"grd"` (GNOME Remote Desktop), `"xrdp"`, or `"none"` |
+| `port` | Always `3389` |
+| `enabled` | `true` if port 3389 is currently listening in the guest |
+
+---
+
+### Enable RDP
+
+```
+POST /api/instances/{name}/rdp/enable
+```
+
+Configures and starts the RDP server inside the VM. Automatically detects whether to use GNOME Remote Desktop (`grdctl`) or `xrdp`.
+
+**Request body:**
+```json
+{
+  "username": "lima",
+  "password": "lima"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `username` | No | RDP username. Defaults to `"lima"`. |
+| `password` | **Yes** | RDP password. |
+
+**Response:**
+```json
+{
+  "data": {
+    "enabled": true,
+    "type": "grd",
+    "message": "RDP enabled via grd"
+  }
+}
+```
+
+**Errors:**
+- `400` — `password` not provided, or body is invalid JSON
+- `404` — no RDP server found in the guest (install `gnome-remote-desktop` or `xrdp`)
+- `500` — `grdctl`/`xrdp` command failed
+
+The WebSocket RDP proxy is available at `ws://<host>:8006/rdp/{name}` and proxies to port 3389 in the guest. The built-in IronRDP WASM client at `/rdp/index.html?vm=<name>` uses this proxy.
+
+---
+
+## Image upload / fetch
+
+These endpoints let you create a VM directly from a disk image file without going through `POST /api/instances/create` + a template. The image is passed to `lima-up`, which auto-generates a Lima YAML config and starts the VM.
+
+Accepted file types: `.qcow2`, `.img`, `.raw` (disk images) and `.yaml`/`.yml` (Lima templates).
+
+### Upload image
+
+```
+POST /api/images/upload
+```
+
+Multipart form upload. Creates and starts a VM once the upload completes.
+
+**Form fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `file` | **Yes** | Disk image or Lima template file |
+| `name` | No | VM name. Defaults to the filename without extension. |
+
+**Example:**
+```bash
+curl -X POST http://localhost:8006/api/images/upload \
+  -F file=@./my-vm.qcow2 \
+  -F name=my-vm
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "status": "created",
+    "instance": "my-vm"
+  }
+}
+```
+
+**Errors:** `400` if the file field is missing or the file type is not allowed.
+
+---
+
+### Fetch image from URL
+
+```
+POST /api/images/fetch
+```
+
+Downloads a disk image from an HTTP/HTTPS URL in the background and creates a VM. Returns `202 Accepted` immediately; the VM appears in the instance list once the download and creation complete.
+
+**Request body:**
+```json
+{
+  "url": "https://example.com/my-vm.qcow2",
+  "name": "my-vm"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | **Yes** | HTTP or HTTPS URL to a `.qcow2`, `.img`, `.raw`, `.yaml`, or `.yml` file |
+| `name` | No | VM name. Defaults to the filename without extension. |
+
+**Response:** `202 Accepted`
+```json
+{
+  "status": "downloading",
+  "instance": "my-vm"
+}
+```
+
+**Errors:** `400` if the URL is invalid, not HTTP/HTTPS, or points to an unsupported file type.
+
+---
 
 ```
 GET /api/instances/{name}/shell
