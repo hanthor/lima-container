@@ -1,7 +1,7 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
 
 # ── Stage 0: Fetch IronRDP WASM from npm ──
-FROM node:22-alpine AS wasm-fetch
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS wasm-fetch
 WORKDIR /wasm
 RUN npm pack ironrdp-wasm@1.0.1 --quiet 2>/dev/null && \
     tar xzf ironrdp-wasm-*.tgz && \
@@ -11,7 +11,7 @@ RUN npm pack ironrdp-wasm@1.0.1 --quiet 2>/dev/null && \
     cp package/pkg/rdp_client.d.ts /out/ 2>/dev/null || true
 
 # ── Stage 1: Build the Go web server ──
-FROM golang:1.24-alpine AS web-builder
+FROM golang:1.26-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648 AS web-builder
 WORKDIR /src
 COPY web/go.mod web/go.sum ./
 COPY web/*.go .
@@ -21,7 +21,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /lima-web .
 
 # ── Stage 2: Final image ──
-FROM ghcr.io/qemus/qemu:latest
+FROM ghcr.io/qemus/qemu:latest@sha256:2dbb898ce93366068ab82bf9ce992d89db39ed3052d0a41d20fe9cb39945bf44
 
 ARG TARGETARCH
 ARG LIMA_VERSION=v2.1.0

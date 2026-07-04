@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:87999aa3d42bdc6bea60565083ee17e86d1f3339802f543c0d03998580f9cb89
 
-FROM ghcr.io/qemus/qemu:latest
+FROM ghcr.io/qemus/qemu:latest@sha256:2dbb898ce93366068ab82bf9ce992d89db39ed3052d0a41d20fe9cb39945bf44
 
 ARG TARGETARCH
 ARG LIMA_VERSION=v2.1.0
